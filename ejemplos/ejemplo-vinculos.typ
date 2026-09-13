@@ -9,17 +9,16 @@
 //   3. Clic en el nombre, en una celda de fecha o en la barra de una tarea:
 //      se abre su línea en tareas-vinculos.yaml dentro del editor.
 //
-// `vinculos-desde-texto` escanea el texto y devuelve `codigo -> URI`; aquí el
-// documento hace el `read()` (el root de lectura le pertenece) y le pasa el
-// texto a la librería. `esquema-vinculo` elige VS Code o VSCodium. Si
-// prefieres control total, cada tarea puede traer su propio campo
-// `vinculo: "vscode://file/..."` y se respeta por encima de todo.
+// `vinculos-desde-texto` escanea el texto y devuelve codigo -> (archivo, lí-
+// nea); `carta-gantt` arma el URI con su parámetro `esquema-vinculo`
+// (default "vscodium"; usa "vscode" para VS Code). Si prefieres control
+// total, cada tarea puede traer su propio campo `vinculo: "vscodium://..."`.
 
 #import "@local/gantt:0.1.0": carta-gantt, vinculos-desde-texto
 
 #let ruta-lectura = "tareas-vinculos.yaml"
 // Typst solo puede LEER rutas relativas al documento (root de compilación),
-// pero el URI que abre VS Code necesita una ruta ABSOLUTA. Se fabrica como
+// pero el URI que abre el editor necesita una ruta ABSOLUTA. Se fabrica como
 // una cadena, sin cargarla: ajústala a tu equipo si mueves el proyecto.
 #let ruta-editor = "D:/Gantt_typ/ejemplos/tareas-vinculos.yaml"
 

@@ -329,16 +329,16 @@ Para que un clic en el PDF abra la **línea correspondiente** de tus datos
 `vscode://file/<ruta>:<linea>` (VS Code) o `vscodium://file/<ruta>:<linea>`
 (VSCodium). La librería ofrece:
 
-- `url-vscode(archivo, linea, esquema: "vscode")` — fabrica el URI
-  (codifica `:`, espacios, `#`, etc.; `esquema: "vscodium"` para VSCodium).
-- `vinculos-desde-texto(texto, archivo, esquema: "vscode")` — escanea el
-  texto y devuelve un dict `codigo -> URI` apuntando a la primera línea
-  donde aparece cada `codigo` (funciona con YAML o Typst; las menciones en
-  `predecesoras` no crean vínculos porque solo cuentan las líneas con la
-  llave `codigo`).
-- Opción `vinculos:` de `carta-gantt` — recibe ese dict y hace clicables las
-  filas (nombre, celdas de datos y barra). El campo `vinculo` por tarea
-  tiene prioridad.
+- `url-vscode(archivo, linea, esquema: "vscodium")` — fabrica el URI
+  (codifica `:`, espacios, `#`, etc.; `esquema: "vscode"` para VS Code).
+- `vinculos-desde-texto(texto, archivo)` — escanea el texto y devuelve un
+  dict `codigo -> (archivo, linea)` con la primera línea donde aparece cada
+  `codigo` (funciona con YAML o Typst; las menciones en `predecesoras` no
+  crean vínculos porque solo cuentan las líneas con la llave `codigo`).
+- Parámetros `vinculos:` y `esquema-vinculo:` de `carta-gantt` — el dict les
+  da las ubicaciones y la carta arma el URI con `esquema-vinculo` (default
+  `"vscodium"`; `"vscode"` para VS Code) y hace clicables las filas (nombre,
+  celdas de datos y barra). El campo `vinculo` por tarea tiene prioridad.
 
 Uso típico (ver [ejemplos/ejemplo-vinculos.typ](ejemplos/ejemplo-vinculos.typ)):
 
@@ -346,9 +346,10 @@ Uso típico (ver [ejemplos/ejemplo-vinculos.typ](ejemplos/ejemplo-vinculos.typ))
 #import "@local/gantt:0.1.0": carta-gantt, vinculos-desde-texto
 
 #let ruta-lectura = "tareas.yaml"              // para LEER: ruta relativa al documento
-#let ruta-editor  = "C:/mi/trabajo/tareas.yaml" // para el URI: ruta ABSOLUTA (VS Code no abre relativas)
+#let ruta-editor  = "C:/mi/trabajo/tareas.yaml" // para el URI: ruta ABSOLUTA (el editor no abre relativas)
 #carta-gantt(yaml(ruta-lectura),
-  vinculos: vinculos-desde-texto(read(ruta-lectura), ruta-editor))
+  vinculos: vinculos-desde-texto(read(ruta-lectura), ruta-editor),
+  esquema-vinculo: "vscodium")                  // default; usa "vscode" en VS Code
 ```
 
 Notas:
@@ -425,7 +426,8 @@ Opciones principales:
 | `color-critico` | un color | `rgb("#dc2626")` (rojo) | Color de la ruta crítica |
 | `mostrar-dependencias` | `true` \| `false` | `true` | Dibuja flechas "elbow" desde el término de cada predecesora hasta el inicio de su sucesora |
 | `color-dependencia` | un color | `rgb("#64748b")` (gris) | Color de las flechas de dependencia |
-| `vinculos` | `none` \| dict `(codigo: "vscode://file/...:linea", ...)` | `none` | Vuelve clicables las filas cuyo `codigo` esté en el dict (nombre, celdas de fecha y barra navegan a esa URI). El dict se arma con `vinculos-desde-texto` + `read` (ver "Salto a línea en el editor") |
+| `vinculos` | `none` \| dict `(codigo: (archivo, linea), ...)` (vía `vinculos-desde-texto`) o `(codigo: "vscodium://...")` | `none` | Vuelve clicables las filas cuyo `codigo` esté en el dict (nombre, celdas de fecha y barra). En el primer caso `carta-gantt` arma el URI con `esquema-vinculo` |
+| `esquema-vinculo` | `"vscodium"` \| `"vscode"` | `"vscodium"` | Esquema del URI de salto a línea cuando `vinculos` trae ubicaciones `(archivo, linea)` |
 | `mostrar-niveles` | `auto` (todos) \| entero ≥ 1 | `auto` | Muestra solo los primeros N niveles de la jerarquía; el resto de las subtareas se ocultan por completo (no solo su barra). Una tarea que se queda sin hijas visibles se dibuja como si nunca hubiera tenido subtareas |
 | `mostrar-serie-avance` | `true` \| `false` | `true` | Si `avance` es una serie, `true` la dibuja como bloques arriba/abajo (ver "Avance como serie de incrementos"); `false` ignora la serie y dibuja un solo bloque con el avance total |
 

@@ -34,8 +34,9 @@
 // --- Vínculos a editor (VS Code / VSCodium) --------------------------------
 // Convierte una ruta local en un URI `vscode://file/<ruta>:<linea>` (o
 // `vscodium://...`) que abre el archivo en la línea indicada. Windows:
-// la letra de unidad y los espacios se codifican (%3A, %20).
-#let url-vscode(archivo, linea, esquema: "vscode") = {
+// la letra de unidad y los espacios se codifican (%3A, %20). El esquema lo
+// elige de una vez `carta-gantt` con su parámetro `esquema-vinculo`.
+#let url-vscode(archivo, linea, esquema: "vscodium") = {
   let ruta = archivo
     .replace("\\", "/")
     .replace("%", "%25")
@@ -48,13 +49,14 @@
 }
 
 // Escanea el TEXTO de un archivo de datos (YAML, Typst u otro que ponga los
-// códigos como `codigo: "1.1"`) y devuelve un diccionario `codigo -> URI del
-// editor` apuntando a la PRIMERA línea donde aparece cada código. No lee
-// archivos a sí misma: el llamador hace `read()` (la resolución de rutas
-// depende del archivo donde se compila, no de la librería) y le pasa el
-// texto. Las menciones en `predecesoras` no definen vínculos porque solo
-// cuentan las líneas que contienen la llave `codigo`.
-#let vinculos-desde-texto(texto, archivo, esquema: "vscode") = {
+// códigos como `codigo: "1.1"`) y devuelve un diccionario `codigo -> (archivo,
+// linea)` con la PRIMERA línea donde aparece cada código. No lee archivos a sí
+// misma: el llamador hace `read()` (la resolución de rutas depende del archivo
+// donde se compila, no de la librería) y le pasa el texto. Las menciones en
+// `predecesoras` no definen vínculos porque solo cuentan las líneas que
+// contienen la llave `codigo`. El URI final lo arma `carta-gantt` con su
+// esquema (`esquema-vinculo`).
+#let vinculos-desde-texto(texto, archivo) = {
   let salida = (:)
   for (i, linea) in texto.replace("\r\n", "\n").split("\n").enumerate() {
     if not linea.contains("codigo") { continue }
@@ -62,7 +64,7 @@
     if partes.len() < 2 { continue }
     let token = partes.at(1)
     if token == "" or token in salida { continue }
-    salida.insert(token, url-vscode(archivo, i + 1, esquema: esquema))
+    salida.insert(token, (archivo, i + 1))
   }
   salida
 }
@@ -209,7 +211,8 @@
   color-critico: rgb("#dc2626"),
   mostrar-dependencias: true, // true | false — dibuja flechas "elbow" entre predecesora y sucesora
   color-dependencia: rgb("#64748b"),
-  vinculos: none,            // none | dict codigo -> URI de editor (ver url-vscode / vinculos-desde-texto); cada fila con ese codigo se vuelve clicable y abre su línea
+  vinculos: none,            // none | dict codigo -> (archivo, linea) vía vinculos-desde-texto (o codigo -> URI ya armado); cada fila con ese codigo se vuelve clicable y abre su línea
+  esquema-vinculo: "vscodium", // "vscodium" | "vscode" — esquema del URI que arma carta-gantt a partir de las ubicaciones de `vinculos` (y el default de url-vscode) para abrir la línea en el editor
 ) = {
   let filas = tareas-listas(tareas, cpm: cpm, inicio-proyecto: inicio-proyecto, termino-proyecto: termino-proyecto)
   assert(filas.len() > 0, message: "carta-gantt: no hay tareas para dibujar.")
@@ -235,15 +238,19 @@
   assert(filas.len() > 0, message: "carta-gantt: mostrar-niveles dejó la lista de tareas vacía.")
 
   // Vínculos a editor: el campo `vinculo` de la fila (si existe) manda; si
-  // no, se usa el dict `vinculos` (codigo -> URI). El dict lo construye el
-  // llamador con `vinculos-desde-texto` + `read` (la librería no lee
-  // archivos: el root de lectura le pertenece al documento que compila).
+  // no, se busca su codigo en el dict `vinculos`. El dict puede traer ya el
+  // URI armado (string) o la ubicación `(archivo, linea)` — en ese caso la
+  // carta arma el URI con `esquema-vinculo`.
   let filas = filas.map(f => {
     let explicito = f.at("vinculo", default: none)
-    let desde-dict = if explicito == none and vinculos != none {
+    let candidato = if explicito == none and vinculos != none {
       vinculos.at(f.codigo, default: none)
     } else { none }
-    let v = if desde-dict != none { desde-dict } else { explicito }
+    let v = if explicito != none { explicito }
+      else if candidato == none { none }
+      else if type(candidato) == array {
+        url-vscode(candidato.at(0), candidato.at(1), esquema: esquema-vinculo)
+      } else { candidato }
     if v == none { return f }
     (: ..f, vinculo: v)
   })

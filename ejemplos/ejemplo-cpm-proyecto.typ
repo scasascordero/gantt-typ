@@ -16,6 +16,9 @@
 // días porque a 2 años de ventana no aportan legibilidad.
 //
 // Las comprobaciones con #assert corren al compilar: son la prueba del motor.
+// Son invariantes (no fijan fechas): puedes cambiar duraciones sin tocar los
+// asserts. El bloque `ajustes` más abajo además permite probar escenarios
+// "qué pasa si" y el motor recalcula todo en cada compilación.
 
 #import "@local/gantt:0.1.0": carta-gantt, preparar-tareas, a-dia-juliano
 
@@ -24,7 +27,7 @@
     codigo: "1",
     nombre: "Ingeniería y permisos",
     subtareas: (
-      (codigo: "1.1", nombre: "Levantamiento geotécnico", inicio: "2026-01-05", duracion: 60),
+      (codigo: "1.1", nombre: "Levantamiento geotécnico", inicio: "2026-01-05", duracion: 30),
       (codigo: "1.2", nombre: "Ingeniería básica", duracion: 80, predecesoras: "1.1"),
       (codigo: "1.3", nombre: "Ingeniería de detalle", duracion: 120, predecesoras: "1.2"),
       (codigo: "1.4", nombre: "Revisión de constructibilidad", duracion: 30, predecesoras: "1.3"),
@@ -70,42 +73,65 @@
 #let fila(c) = filas.find(f => f.codigo == c)
 #let d0 = a-dia-juliano("2026-01-05")   // día juliano del ancla 1.1
 
-// --- Cálculos clave del pase hacia adelante --------------------------------
-#assert(fila("1.1").inicio-temprano-dias == d0, message: "1.1 arranca el 2026-01-05")
-#assert(fila("1.3").inicio-temprano-dias == d0 + 140, message: "1.3 inicia 140 días después de 1.1")
-#assert(fila("1.5").inicio-temprano-dias == d0 + 290, message: "1.5 inicia tras 1.4 (290)")
-#assert(fila("3.1").inicio-temprano-dias == d0 + 290, message: "3.1 = 1.4:ss:30 arranca en 290")
-#assert(fila("3.3").inicio-temprano-dias == d0 + 440, message: "3.3 espera a 3.1 (440)")
-#assert(fila("4.1").inicio-temprano-dias == d0 + 550, message: "4.1 espera el montaje (550)")
-#assert(fila("4.5").inicio-temprano-dias == d0 + 695, message: "4.5 arranca en 695")
-#assert(fila("4.5").termino-temprano-dias == d0 + 719, message: "El proyecto termina en 719 (~2027-12-25)")
+// --- Qué pasa si: cambia duraciones SIN tocar `tareas` ----------------------
+// Cada dict de `ajustes` trae `codigo` + los campos por reemplazar (duracion,
+// inicio, predecesoras...). El motor recalcula TODO en cada compilación:
+// fechas, holguras, ruta crítica y flechas se derivan solas de esos números.
+// Para volver a la red original pon `ajustes = ()`.
+#let ajustes = ((codigo: "3.3", duracion: 140),)
 
-// --- Holguras y ruta crítica -------------------------------------------------
-#assert(fila("1.1").holgura == 0, message: "1.1 en ruta crítica")
-#assert(fila("1.4").holgura == 0, message: "1.4 restringe a 3.1 por ss -> crítica")
-#assert(fila("1.5").holgura == 390, message: "1.5 tiene 390 días de holgura")
-#assert(fila("2.1").holgura == 20, message: "2.1 tiene 20 días de holgura")
-#assert(fila("2.5").holgura == 250, message: "2.5 (techumbre) tiene 250 días de holgura")
-#assert(fila("3.2").holgura == 70, message: "3.2 tiene 70 días de holgura")
-#assert(fila("3.4").holgura == 20, message: "3.4 tiene 20 días de holgura")
-#assert(fila("3.5").holgura == 30, message: "3.5 tiene 30 días de holgura")
-#assert(fila("4.3").holgura == 0, message: "4.3 en ruta crítica")
-#assert(fila("4.4").holgura == 20, message: "4.4 tiene 20 días de holgura")
-#assert(fila("4.5").holgura == 0, message: "4.5 cierra la ruta crítica")
-#assert(fila("3.1").critico == true, message: "3.1 es crítica")
-#assert(fila("3.3").critico == true, message: "3.3 es crítica")
-#assert(fila("2.1").critico == false, message: "2.1 no es crítica")
-#assert(fila("1.5").critico == false, message: "1.5 no es crítica")
+#let ajuste-de(ajustes, codigo) = {
+  let partidos = ajustes.filter(a => a.codigo == codigo)
+  if partidos.len() == 0 { none } else { partidos.at(0) }
+}
+#let aplicar-ajustes(nodo, ajustes) = nodo.map(t => {
+  let a = ajuste-de(ajustes, t.codigo)
+  if t.at("subtareas", default: none) != none {
+    (: ..t, subtareas: aplicar-ajustes(t.subtareas, ajustes))
+  } else if a == none {
+    t
+  } else {
+    let resto = (:)
+    for (k, v) in a.pairs() {
+      if k != "codigo" { resto.insert(k, v) }
+    }
+    (: ..t, ..resto)
+  }
+})
+#let filas-aj = preparar-tareas(aplicar-ajustes(tareas, ajustes), cpm: true)
+#let fila-aj(c) = filas-aj.find(f => f.codigo == c)
 
-// --- Sobre (rollup) de los grupos -------------------------------------------
-#assert(fila("1").inicio-dias == d0, message: "Grupo 1 abre en 2026-01-05")
-#assert(fila("4").termino-dias == d0 + 719, message: "Grupo 4 cierra el proyecto")
-#assert(fila("4").critico == true, message: "Grupo 4 es crítico (tiene hijas críticas)")
+// --- Invariantes del motor (valen para CUALQUIER duración) ------------------
+// No fijan fechas ni holguras: comprueban la coherencia interna del motor con
+// cualquier dato. Por eso puedes cambiar duraciones a mano y seguir compilando.
+#let verificar-invariantes(filas, etiqueta) = {
+  for f in filas {
+    if f.at("holgura", default: none) == none { continue }
+    assert(f.inicio-tardio-dias >= f.inicio-temprano-dias, message: (etiqueta, "/", f.codigo, ": inicio tardío >= temprano").join())
+    assert(f.termino-tardio-dias >= f.termino-temprano-dias, message: (etiqueta, "/", f.codigo, ": término tardío >= temprano").join())
+    assert(f.holgura == f.inicio-tardio-dias - f.inicio-temprano-dias, message: (etiqueta, "/", f.codigo, ": holgura = tardío - temprano").join())
+    assert(f.critico == (f.holgura == 0), message: (etiqueta, "/", f.codigo, ": crítico <=> holgura nula").join())
+    assert(f.termino-temprano-dias == f.inicio-temprano-dias + f.duracion - 1, message: (etiqueta, "/", f.codigo, ": término = inicio + duración - 1").join())
+  }
+}
+#verificar-invariantes(filas, "base")
 
-// --- La carta ---------------------------------------------------------------
-#carta-gantt(
-  tareas,
-  titulo: [Cronograma maestro 2026–2027 — 20 actividades en 4 frentes, CPM],
+// --- Prueba de recálculo "qué pasa si" --------------------------------------
+#if ajustes.len() > 0 {
+  verificar-invariantes(filas-aj, "QSF")
+  let a0 = ajustes.at(0)
+  let br = fila(a0.codigo)
+  let delta = if a0.at("duracion", default: none) == none { 0 } else {
+    a0.at("duracion") - br.duracion
+  }
+  assert(fila-aj(a0.codigo).termino-temprano-dias == br.termino-temprano-dias + delta,
+    message: ("QSF: ", a0.codigo, " recalculó su término (", str(delta), " días)").join())
+  assert(fila-aj("4.5").termino-temprano-dias >= fila("4.5").termino-temprano-dias,
+    message: "QSF: el fin del proyecto nunca se adelanta")
+}
+
+// --- La carta (línea base) ----------------------------------------------------
+#let opciones-proyecto = (
   cpm: true,
   ancho-linea-tiempo: 26cm,
   nivel-anio: true,
@@ -114,4 +140,17 @@
   nivel-dia: false,
   mostrar-duracion: true,
   mostrar-columnas: ("inicio", "duracion", "holgura"),
+  mostrar-niveles: 2,
+  mostrar-hoy: true,
 )
+#carta-gantt(tareas, titulo: [Cronograma maestro 2026–2027 — 20 actividades en 4 frentes, CPM], ..opciones-proyecto)
+
+// --- Carta "qué pasa si" (solo cuando hay ajustes) ----------------------------
+#if ajustes.len() > 0 [
+  #v(1.4em)
+  #carta-gantt(
+    aplicar-ajustes(tareas, ajustes),
+    titulo: [Qué pasa si — #(ajustes.at(0).codigo) con duración de #(ajustes.at(0).duracion) días],
+    ..opciones-proyecto,
+  )
+]

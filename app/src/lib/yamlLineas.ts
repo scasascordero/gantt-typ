@@ -12,21 +12,24 @@ export function listarTareas(texto: string): Tarea[] {
     if (doc.errors.length > 0) return [];
     const nodoTareas = doc.get("tareas", true);
     if (!isSeq(nodoTareas)) return [];
-    return nodoTareas.items
-      .map((item): Tarea | null => {
-        if (!isMap(item)) return null;
-        const inicio = item.range ? item.range[0] : 0;
-        const id = item.get("id", true);
-        const nombre = item.get("nombre", true);
-        const linea = texto.slice(0, inicio).split("\n").length;
-        if (typeof id !== "string") return null;
-        return {
-          id,
-          nombre: typeof nombre === "string" ? nombre : String(id),
+    const resultado: Tarea[] = [];
+    const aplanar = (nodo: unknown): void => {
+      if (!isMap(nodo)) return;
+      const codigo = nodo.get("codigo");
+      const nombre = nodo.get("nombre");
+      const linea = texto.slice(0, nodo.range ? nodo.range[0] : 0).split("\n").length;
+      if (typeof codigo === "string") {
+        resultado.push({
+          id: codigo,
+          nombre: typeof nombre === "string" ? nombre : String(codigo),
           linea,
-        };
-      })
-      .filter((t): t is Tarea => t !== null);
+        });
+      }
+      const sub = nodo.get("subtareas", true);
+      if (isSeq(sub)) for (const item of sub.items) aplanar(item);
+    };
+    for (const item of nodoTareas.items) aplanar(item);
+    return resultado;
   } catch {
     return [];
   }

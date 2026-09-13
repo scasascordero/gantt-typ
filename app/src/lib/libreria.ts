@@ -1,4 +1,4 @@
-import { createTypstCompiler } from "@myriaddreamin/typst.ts";
+import { createTypstCompiler, loadFonts } from "@myriaddreamin/typst.ts";
 import { createTypstRenderer } from "@myriaddreamin/typst.ts/renderer";
 import type { TypstCompiler } from "@myriaddreamin/typst.ts";
 import type { TypstRenderer } from "@myriaddreamin/typst.ts/renderer";
@@ -25,6 +25,11 @@ export function fuentesLibreria(): Record<string, string> {
   };
 }
 
+const fuentesSvg = () => [
+  "/fonts/LiberationSans-Regular.ttf",
+  "/fonts/LiberationSans-Bold.ttf",
+];
+
 let compiler: TypstCompiler | undefined;
 let renderer: TypstRenderer | undefined;
 let inicio: Promise<void> | undefined;
@@ -36,9 +41,11 @@ async function iniciar(): Promise<void> {
     fetch(new URL(`/wasm/${nombre}`, window.location.origin));
   await compiler.init({
     getModule: moduleWasm("typst_ts_web_compiler_bg.wasm"),
+    beforeBuild: [loadFonts(fuentesSvg())],
   });
   await renderer.init({
     getModule: moduleWasm("typst_ts_renderer_bg.wasm"),
+    beforeBuild: [loadFonts(fuentesSvg())],
   });
   compiler.addSource("/main.typ", plantillaViz);
   compiler.addSource("/gantt.typ", ganttTyp);

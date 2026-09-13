@@ -36,15 +36,12 @@ export function analizarSvg(svg: string): Geometria {
 
   const formas = leerFormas(svg);
   const separadores = formas
-    .filter((f) => f.stroke === "e2e8f0" && f.y1 - f.y0 === 0 && f.x1 - f.x0 > ancho * 0.5)
+    .filter((f) => f.stroke === "e2e8f0" && f.y1 - f.y0 === 0 && f.x1 - f.x0 > ancho * 0.8)
     .map((f) => f.y0)
     .sort((a, b) => a - b);
 
   const unicos = [...new Set(separadores.map((y) => Math.round(y * 100) / 100))];
-  const bandas: Banda[] = [];
-  for (let i = 0; i + 1 < unicos.length; i++) {
-    bandas.push({ y0: unicos[i], y1: unicos[i + 1] });
-  }
+  const bandas = construirBandas(unicos);
 
   const barras: Rect[] = formas
     .filter((f) => f.fill === "719af2" && f.y1 - f.y0 > 1)
@@ -61,6 +58,21 @@ export function analizarSvg(svg: string): Geometria {
   const hoy = hoyForma ? (hoyForma.y0 + hoyForma.y1) / 2 : undefined;
 
   return { ancho, alto, bandas, barras, hoy };
+}
+
+function construirBandas(separadores: number[]): Banda[] {
+  if (!separadores.length) return [];
+  const g =
+    separadores.length > 1
+      ? Math.round((separadores[1] - separadores[0]) * 100) / 100
+      : 17.01;
+  const y0 = Math.round((separadores[0] - g) * 100) / 100;
+  const ys = [y0, ...separadores];
+  const bandas: Banda[] = [];
+  for (let i = 0; i + 1 < ys.length; i++) {
+    bandas.push({ y0: ys[i], y1: ys[i + 1] });
+  }
+  return bandas;
 }
 
 function leerFormas(svg: string): Forma[] {
@@ -94,7 +106,13 @@ function leerFormas(svg: string): Forma[] {
       if (top) [x, y] = top;
       i = cerrar + 4;
     } else {
-      const fin = svg.indexOf("/>", linea) + 2;
+      const autoCierre = svg.indexOf("/>", linea);
+      const cierrePar = svg.indexOf("</path>", linea);
+      const fin =
+        (autoCierre === -1 ? Infinity : autoCierre) <
+        (cierrePar === -1 ? Infinity : cierrePar)
+          ? autoCierre + 2
+          : cierrePar;
       const tag = svg.slice(linea, fin);
       const d = tag.match(/d="([^"]+)"/)?.[1];
       if (d) {

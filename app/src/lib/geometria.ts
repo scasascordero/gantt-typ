@@ -36,7 +36,13 @@ export function analizarSvg(svg: string): Geometria {
 
   const formas = leerFormas(svg);
   const separadores = formas
-    .filter((f) => f.stroke === "e2e8f0" && f.y1 - f.y0 === 0 && f.x1 - f.x0 > ancho * 0.8)
+    .filter(
+      (f) =>
+        f.stroke === "e2e8f0" &&
+        f.y1 - f.y0 === 0 &&
+        f.y0 > 1 &&
+        f.x1 - f.x0 > ancho * 0.8,
+    )
     .map((f) => f.y0)
     .sort((a, b) => a - b);
 

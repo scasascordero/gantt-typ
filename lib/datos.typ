@@ -272,17 +272,15 @@
 
 // --- Marcado de la ruta crítica en la jerarquía ---------------------------
 
-// Deja en `critico-de` el flag de crítico para todos los códigos: las hojas
-// lo traen del motor CPM; un grupo (tarea con subtareas) es crítico si
-// cualquiera de sus descendientes lo es.
-#let marcar-critico(indice, codigo, critico-de) = {
+// Función pura: dice si un nodo (hoja o grupo) es crítico. Las hojas lo
+// traen del motor CPM (están en `criticos`); un grupo (tarea con subtareas)
+// es crítico si cualquiera de sus descendientes lo es. Nada se modifica por
+// efecto (los diccionarios que se pasan como argumento se copian en Typst,
+// así que un `.insert` aquí no llegaría a quien llama).
+#let marcar-critico(indice, codigo, criticos) = {
   let hijos = indice.hijos-de.at(codigo, default: ())
-  if hijos.len() == 0 { critico-de.at(codigo) }
-  else {
-    let valor = hijos.map(h => marcar-critico(indice, h, critico-de)).any(v => v)
-    critico-de.insert(codigo, valor)
-    valor
-  }
+  if hijos.len() == 0 { criticos.at(codigo) }
+  else { hijos.map(h => marcar-critico(indice, h, criticos)).any(v => v) }
 }
 
 // --- API pública ----------------------------------------------------------
@@ -356,9 +354,6 @@
 
     let ck = (:)
     for h in hojas { ck.insert(h.codigo, r.at(h.codigo).critico) }
-    for raiz in indice.raices {
-      let _ = marcar-critico(indice, raiz, ck)
-    }
     critico-de = ck
   }
 
@@ -382,7 +377,7 @@
     if not cpm { base }
     else {
       let extra = if es-grupo {
-        (holgura: none, critico: critico-de.at(o.codigo), predecesoras: ())
+        (holgura: none, critico: marcar-critico(indice, o.codigo, critico-de), predecesoras: ())
       } else {
         let cr = res-cpm.at(o.codigo)
         (

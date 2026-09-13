@@ -28,6 +28,7 @@ ejemplos/
   ejemplo-columnas.typ        -> columnas de datos (inicio, término, duración, avance)
   ejemplo-insertado.typ       -> pagina: false, insertada en un documento con su propia página
   ejemplo-cpm.typ             -> CPM: fechas calculadas desde predecesoras + ruta crítica + flechas
+  ejemplo-cpm-proyecto.typ    -> CPM a 2 años (~20 tareas en 4 frentes), cabecera solo años y meses
 herramientas/
   xlsx_a_datos.py              -> conversor opcional Excel -> yaml/csv
 ```

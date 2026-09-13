@@ -458,6 +458,7 @@ Opciones principales:
 | `esquema-vinculo` | `"vscodium"` \| `"vscode"` | `"vscodium"` | Esquema del URI de salto a línea cuando `vinculos` trae ubicaciones `(archivo, linea)` |
 | `mostrar-niveles` | `auto` (todos) \| entero ≥ 1 | `auto` | Muestra solo los primeros N niveles de la jerarquía; el resto de las subtareas se ocultan por completo (no solo su barra). Una tarea que se queda sin hijas visibles se dibuja como si nunca hubiera tenido subtareas |
 | `mostrar-serie-avance` | `true` \| `false` | `true` | Si `avance` es una serie, `true` la dibuja como bloques arriba/abajo (ver "Avance como serie de incrementos"); `false` ignora la serie y dibuja un solo bloque con el avance total |
+| `mostrar-avance` | `true` \| `false` | `true` | Dibuja la barra de avance dentro de cada tarea; si `false`, la barra de avance se omite por completo (la barra principal de la tarea sigue visible) |
 
 Cuando una tarea queda parcial o totalmente fuera de `ventana-inicio`/
 `ventana-fin`, su barra se recorta (o se omite del todo) en vez de

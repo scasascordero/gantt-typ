@@ -138,6 +138,14 @@ export const PARAMETROS: ParamDef[] = [
     ayuda: "Dibuja la serie de avance como bloques contiguos en patrón zigzag; false: un solo bloque con el avance total",
   },
   {
+    clave: "mostrar-avance",
+    etiqueta: "Mostrar barra de avance",
+    grupo: "Avance",
+    tipo: "bool",
+    defecto: true,
+    ayuda: "Dibuja la barra de avance dentro de cada tarea",
+  },
+  {
     clave: "mostrar-niveles",
     etiqueta: "Niveles visibles",
     grupo: "Texto",

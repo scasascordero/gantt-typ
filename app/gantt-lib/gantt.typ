@@ -205,6 +205,7 @@
   mostrar-columnas: (),      // subconjunto y orden de ("duracion", "inicio", "termino", "avance", "holgura", "critico", "inicio-temprano", "termino-temprano", "inicio-tardio", "termino-tardio"); columnas de datos entre el nombre y la línea de tiempo
   mostrar-niveles: auto,     // auto (todos) | entero >= 1 — cuántos niveles de la jerarquía mostrar; el resto (subtareas más profundas) se ocultan por completo
   mostrar-serie-avance: true, // true | false — si avance es una serie, dibujarla como bloques arriba/abajo (true) o como un solo bloque con el avance total (false)
+  mostrar-avance: true,       // true | false — dibuja la barra de avance dentro de las tareas
   cpm: false,                // true | false — calcula fechas y ruta crítica desde las dependencias (predecesoras)
   inicio-proyecto: none,     // none | "AAAA-MM-DD" — arranque del proyecto cuando no sale solo de los datos
   termino-proyecto: none,    // none | "AAAA-MM-DD" — cierre del proyecto para el pase hacia atrás del CPM
@@ -573,7 +574,9 @@
                 caja(x1, y-top, x2, y-top + alto-barra, relleno: none, trazo: 0.6pt + color-base, radio: 1.5pt)
                 // Avance: barra gris centrada en la barra principal (ver
                 // dibujar-avance para el detalle de alturas y redondeos).
-                dibujar-avance(x1-real, x2-real, x1, x2, y-centro, alto-barra, f.avance, avance-serie, color-avance)
+                if mostrar-avance {
+                  dibujar-avance(x1-real, x2-real, x1, x2, y-centro, alto-barra, f.avance, avance-serie, color-avance)
+                }
               }
             } else {
               let alto-barra = alto-fila * 0.62
@@ -581,7 +584,9 @@
               caja(x1, y-top, x2, y-top + alto-barra, relleno: color-base.lighten(35%), radio: 1.5pt)
               // Avance: barra gris centrada en la barra principal (ver
               // dibujar-avance para el detalle de alturas y redondeos).
-              dibujar-avance(x1-real, x2-real, x1, x2, y-centro, alto-barra, f.avance, avance-serie, color-avance)
+              if mostrar-avance {
+                dibujar-avance(x1-real, x2-real, x1, x2, y-centro, alto-barra, f.avance, avance-serie, color-avance)
+              }
             }
           }
 

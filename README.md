@@ -345,11 +345,11 @@ Uso típico (ver [ejemplos/ejemplo-vinculos.typ](ejemplos/ejemplo-vinculos.typ))
 ```typst
 #import "@local/gantt:0.1.0": carta-gantt, vinculos-desde-texto
 
-#let ruta-lectura = "tareas.yaml"              // para LEER: ruta relativa al documento
-#let ruta-editor  = "C:/mi/trabajo/tareas.yaml" // para el URI: ruta ABSOLUTA (el editor no abre relativas)
+#let ruta-pdf = "C:/mi/trabajo"        // única ruta ABSOLUTA: carpeta del PDF/proyecto
+#let ruta-lectura = "tareas.yaml"      // nombres relativos (los lee Typst)
 #carta-gantt(yaml(ruta-lectura),
-  vinculos: vinculos-desde-texto(read(ruta-lectura), ruta-editor),
-  esquema-vinculo: "vscodium")                  // default; usa "vscode" en VS Code
+  vinculos: vinculos-desde-texto(read(ruta-lectura), ruta-pdf + "/" + ruta-lectura),
+  esquema-vinculo: "vscodium")         // default; usa "vscode" en VS Code
 ```
 
 Notas:

@@ -16,14 +16,16 @@
 
 #import "@local/gantt:0.1.0": carta-gantt, vinculos-desde-texto
 
+// La única ruta ABSOLUTA es la carpeta del PDF/proyecto (`ruta-pdf`); el
+// resto se arma con el nombre relativo. Si mueves la carpeta, cambias una
+// sola línea. Typst solo puede LEER rutas relativas al documento (root de
+// compilación); el URI que abre el editor se fabrica como cadena con la
+// ruta absoluta, sin cargarla.
+#let ruta-pdf = "D:/Gantt_typ/ejemplos"
 #let ruta-lectura = "tareas-vinculos.yaml"
-// Typst solo puede LEER rutas relativas al documento (root de compilación),
-// pero el URI que abre el editor necesita una ruta ABSOLUTA. Se fabrica como
-// una cadena, sin cargarla: ajústala a tu equipo si mueves el proyecto.
-#let ruta-editor = "D:/Gantt_typ/ejemplos/tareas-vinculos.yaml"
 
 #let datos = yaml(ruta-lectura)
-#let vinculos = vinculos-desde-texto(read(ruta-lectura), ruta-editor)
+#let vinculos = vinculos-desde-texto(read(ruta-lectura), ruta-pdf + "/" + ruta-lectura)
 
 #carta-gantt(
   datos,

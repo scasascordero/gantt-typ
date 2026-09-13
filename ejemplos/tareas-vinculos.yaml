@@ -5,7 +5,7 @@ tareas:
     nombre: "Frente logístico"
     subtareas:
       - codigo: "1.1"
-        nombre: "Adquisición de materiales"
+        nombre: "Adquisición de todos los materiales"
         inicio: "2026-02-02"
         duracion: 30
       - codigo: "1.2"
@@ -16,7 +16,7 @@ tareas:
     nombre: "Frente de montaje"
     subtareas:
       - codigo: "2.1"
-        nombre: "Montaje de equipos A"
+        nombre: "Montaje de equipos AA"
         duracion: 25
         predecesoras: "1.2"
       - codigo: "2.2"

@@ -1,0 +1,12 @@
+Windows Registry Editor Version 5.00
+
+; Registra vscodium:// a nivel de sistema (HKLM) para que Windows
+; lo liste como protocolo con app predeterminada y deje de pedir permiso
+; cada vez. Para VSCodium la ruta cambiable: C:\VSCodium\VSCodium.exe
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\vscodium]
+@="URL:vscodium"
+"URL Protocol"=""
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\vscodium\shell\open\command]
+@="\"C:\\VSCodium\\VSCodium.exe\" --open-url -- \"%1\""

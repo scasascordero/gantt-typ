@@ -40,14 +40,19 @@ async fn abrir_archivo() -> Result<Option<ArchivoAbierto>, String> {
 async fn guardar_archivo(
     ruta: Option<String>,
     contenido: String,
+    nombre: Option<String>,
 ) -> Result<Option<String>, String> {
     let ruta = match ruta {
         Some(r) => PathBuf::from(r),
         None => {
-            let elegido = tauri::async_runtime::spawn_blocking(|| {
+            let nombre_dialogo = nombre.clone().unwrap_or_else(|| "carta-gantt.yaml".to_string());
+            let elegido = tauri::async_runtime::spawn_blocking(move || {
                 rfd::FileDialog::new()
-                    .set_file_name("carta-gantt.yaml")
+                    .set_file_name(&nombre_dialogo)
                     .add_filter("YAML", &["yaml", "yml"])
+                    .add_filter("XML", &["xml"])
+                    .add_filter("SVG", &["svg"])
+                    .add_filter("Todos", &["*"])
                     .save_file()
             })
             .await

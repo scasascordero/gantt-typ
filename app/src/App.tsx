@@ -9,8 +9,15 @@ import { compilarSvg, fuentesLibreria } from "./lib/libreria";
 import { analizarSvg } from "./lib/geometria";
 import { listarTareas } from "./lib/yamlLineas";
 import { generarMainTyp, valoresDefault, type Valor } from "./lib/params";
+import { prepararProyecto } from "./lib/proyecto";
+import { aMSPDI, aPMXML, aXER } from "./lib/exportadores";
+import { desdeMSPDI, esMSPDI } from "./lib/mspdi";
 import MenuParametros from "./MenuParametros";
 import "./App.css";
+
+const ZOOM_MIN = 1; // "Ajustar" (100%) es el piso: el dibujo nunca queda más
+                    // chico que el ancho de su panel
+const ZOOM_MAX = 8;
 
 interface Doc {
   id: string;
@@ -28,6 +35,14 @@ function docVacio(id: string): Doc {
   return { id, nombre: "sin-titulo.yaml", texto: "", sucio: false };
 }
 
+interface PopupFecha {
+  x: number;
+  y: number;
+  desde: number;
+  hasta: number;
+  valor: string;
+}
+
 function App() {
   const [docs, setDocs] = useState<Doc[]>(() => [
     { id: "doc-1", nombre: "ejemplo_1.yaml", texto: ejemploDatos, sucio: false },
@@ -39,8 +54,13 @@ function App() {
   const [exportando, setExportando] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [zoom, setZoom] = useState(1);
+  const [anchoEditorPct, setAnchoEditorPct] = useState(40);
+  const [arrastrandoDivisor, setArrastrandoDivisor] = useState(false);
+  const contenidoRef = useRef<HTMLElement | null>(null);
   const [parametros, setParametros] = useState<Record<string, Valor>>(() => valoresDefault());
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [popupFecha, setPopupFecha] = useState<PopupFecha | null>(null);
+  const inputFecha = useRef<HTMLInputElement | null>(null);
 
   const mainTyp = useMemo(() => generarMainTyp(parametros), [parametros]);
   const nivelActual = String(parametros["mostrar-niveles"] ?? "auto");
@@ -109,7 +129,7 @@ function App() {
     const alRueda = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
-      setZoom((z) => Math.min(8, Math.max(0.2, z * (e.deltaY < 0 ? 1.12 : 1 / 1.12))));
+      setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z * (e.deltaY < 0 ? 1.12 : 1 / 1.12))));
     };
     caja.addEventListener("wheel", alRueda, { passive: false });
     return () => caja.removeEventListener("wheel", alRueda);
@@ -232,6 +252,34 @@ function App() {
     }
   }, [ponerEnEditor]);
 
+  const importarMspdi = useCallback(async () => {
+    try {
+      const r = await invoke<{ ruta: string; contenido: string } | null>("abrir_archivo");
+      if (!r) return;
+      if (!esMSPDI(r.contenido)) {
+        setMensaje("El archivo no parece MSPDI (MS Project 2003 XML)");
+        return;
+      }
+      const yamlTexto = desdeMSPDI(r.contenido);
+      const id = `doc-${Date.now()}`;
+      idActivoRef.current = id;
+      setDocs((prev) => [
+        ...prev,
+        {
+          id,
+          nombre: nombreDe(r.ruta).replace(/\.xml$/i, "") + ".yaml",
+          texto: yamlTexto,
+          sucio: true,
+        },
+      ]);
+      setIdActivo(id);
+      ponerEnEditor(yamlTexto);
+      setMensaje(`MSPDI importado desde ${nombreDe(r.ruta)} (${listarTareas(yamlTexto).length} tareas)`);
+    } catch (err) {
+      setMensaje(`Error al importar: ${String(err)}`);
+    }
+  }, [ponerEnEditor]);
+
   const guardarDoc = useCallback(
     async (como: boolean) => {
       const d = docActual;
@@ -240,6 +288,7 @@ function App() {
         const nuevaRuta = await invoke<string | null>("guardar_archivo", {
           ruta: como ? null : (d.ruta ?? null),
           contenido: d.texto,
+          nombre: d.nombre,
         });
         if (!nuevaRuta) return;
         setDocs((prev) =>
@@ -300,6 +349,89 @@ function App() {
     [cambiarParametro],
   );
 
+  useEffect(() => {
+    if (!arrastrandoDivisor) return;
+    const mover = (e: PointerEvent) => {
+      const caja = contenidoRef.current;
+      if (!caja) return;
+      const r = caja.getBoundingClientRect();
+      const pct = ((e.clientX - r.left) / r.width) * 100;
+      setAnchoEditorPct(Math.min(78, Math.max(22, pct)));
+    };
+    const soltar = () => setArrastrandoDivisor(false);
+    window.addEventListener("pointermove", mover);
+    window.addEventListener("pointerup", soltar);
+    document.body.style.userSelect = "none";
+    return () => {
+      window.removeEventListener("pointermove", mover);
+      window.removeEventListener("pointerup", soltar);
+      document.body.style.userSelect = "";
+    };
+  }, [arrastrandoDivisor]);
+
+  // clic derecho sobre una fecha AAAA-MM-DD del YAML: calendario para elegirla
+  const alClicDerechoEditor = useCallback((e: React.MouseEvent) => {
+    const v = editorRef.current;
+    if (!v) return;
+    const pos = v.posAtCoords({ x: e.clientX, y: e.clientY }, false);
+    if (pos === null) return;
+    const linea = v.state.doc.lineAt(pos);
+    const off = pos - linea.from;
+    const re = /\d{4}-\d{2}-\d{2}/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(linea.text)) !== null) {
+      if (off >= m.index && off <= m.index + m[0].length) {
+        e.preventDefault();
+        setPopupFecha({
+          x: e.clientX,
+          y: e.clientY,
+          desde: linea.from + m.index,
+          hasta: linea.from + m.index + 10,
+          valor: m[0],
+        });
+        return;
+      }
+    }
+  }, []);
+
+  const aplicarFecha = (nueva: string) => {
+    if (!nueva || !popupFecha) return;
+    const v = editorRef.current;
+    if (v) {
+      v.dispatch({ changes: { from: popupFecha.desde, to: popupFecha.hasta, insert: nueva } });
+      v.focus();
+    }
+    setPopupFecha(null);
+  };
+
+  useEffect(() => {
+    if (!popupFecha) return;
+    const input = inputFecha.current;
+    if (input) {
+      input.focus();
+      try {
+        (input as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+      } catch {
+        // sin activación de usuario suficiente: el usuario abre el calendario a mano
+      }
+    }
+    const cerrar = (ev: Event) => {
+      if (ev instanceof KeyboardEvent) {
+        if (ev.key === "Escape") setPopupFecha(null);
+        return;
+      }
+      const el = ev.target as Element | null;
+      if (el?.closest?.(".popup-fecha")) return;
+      setPopupFecha(null);
+    };
+    window.addEventListener("mousedown", cerrar);
+    window.addEventListener("keydown", cerrar);
+    return () => {
+      window.removeEventListener("mousedown", cerrar);
+      window.removeEventListener("keydown", cerrar);
+    };
+  }, [popupFecha]);
+
   const exportarPdf = async () => {
     setExportando(true);
     setMensaje("");
@@ -314,6 +446,51 @@ function App() {
       setMensaje(`Error: ${String(err)}`);
     } finally {
       setExportando(false);
+    }
+  };
+
+  const exportarSvg = async () => {
+    if (!svg) return;
+    const base = docActual.nombre.replace(/\.[^.]+$/, "") || "carta-gantt";
+    try {
+      const ruta = await invoke<string | null>("guardar_archivo", {
+        ruta: null,
+        contenido: svg,
+        nombre: `${base}.svg`,
+      });
+      if (ruta) setMensaje(`SVG exportado: ${ruta}`);
+    } catch (err) {
+      setMensaje(`Error: ${String(err)}`);
+    }
+  };
+
+  const exportarPlan = async (formato: "mspdi" | "pmxml" | "xer") => {
+    try {
+      const fechaOpt = (k: string) => {
+        const v = parametros[k];
+        return typeof v === "string" && v.trim() !== "" ? v : undefined;
+      };
+      const filas = prepararProyecto(texto, {
+        cpm: parametros["cpm"] === true,
+        inicioProyecto: fechaOpt("inicio-proyecto"),
+        terminoProyecto: fechaOpt("termino-proyecto"),
+      });
+      if (!filas.length) {
+        setMensaje("nada que exportar: no se reconocieron tareas en el YAML");
+        return;
+      }
+      const nombre = docActual.nombre.replace(/\.[^.]+$/, "") || "carta-gantt";
+      const p = { nombre, filas };
+      const contenido = formato === "mspdi" ? aMSPDI(p) : formato === "pmxml" ? aPMXML(p) : aXER(p);
+      const ext = formato === "xer" ? "xer" : "xml";
+      const ruta = await invoke<string | null>("guardar_archivo", {
+        ruta: null,
+        contenido,
+        nombre: `${nombre}.${ext}`,
+      });
+      if (ruta) setMensaje(`Exportado ${formato.toUpperCase()}: ${ruta}`);
+    } catch (err) {
+      setMensaje(`Error al exportar: ${String(err)}`);
     }
   };
 
@@ -337,6 +514,20 @@ function App() {
         <button onClick={exportarPdf} disabled={exportando || estados !== "ok"}>
           {exportando ? "Exportando…" : "Exportar PDF"}
         </button>
+        <button onClick={exportarSvg} disabled={estados !== "ok"} title="Guardar el SVG del preview">
+          Exportar SVG
+        </button>
+        <span className="grupo-export">
+          <button onClick={() => exportarPlan("mspdi")} title="MS Project 2003 XML (.xml)">
+            MSPDI
+          </button>
+          <button onClick={() => exportarPlan("pmxml")} title="Primavera P6 XML (.xml)">
+            PMXML
+          </button>
+          <button onClick={() => exportarPlan("xer")} title="Primavera P6 XER (.xer)">
+            XER
+          </button>
+        </span>
         {mensaje && <span className="mensaje">{mensaje}</span>}
       </header>
 
@@ -361,6 +552,9 @@ function App() {
           <button onClick={() => void abrirArchivo()} title="Abrir archivo…">
             Abrir…
           </button>
+          <button onClick={() => void importarMspdi()} title="Importar MSPDI (MS Project 2003 XML)">
+            Importar MSPDI
+          </button>
           <button onClick={() => guardarDoc(false)} title="Guardar (Ctrl+S)">
             Guardar
           </button>
@@ -373,17 +567,31 @@ function App() {
         </div>
       </div>
 
-      <main className="contenido">
-        <section className="panel-editor">
+      <main
+        className="contenido"
+        ref={contenidoRef}
+        style={{ gridTemplateColumns: `minmax(280px, ${anchoEditorPct}%) 7px 1fr` }}
+      >
+        <section className="panel-editor" onContextMenu={alClicDerechoEditor}>
           <div ref={contenedorEditor} className="editor" />
         </section>
+
+        <div
+          className={`divisor${arrastrandoDivisor ? " divisor-activo" : ""}`}
+          title="Arrastrar para redimensionar · doble clic: restablecer"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            setArrastrandoDivisor(true);
+          }}
+          onDoubleClick={() => setAnchoEditorPct(40)}
+        />
 
         <section className="panel-preview">
           {svg && geometria ? (
             <>
               <div className="zoom-barra">
                 <button
-                  onClick={() => setZoom((z) => Math.max(0.2, z / 1.25))}
+                  onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z / 1.25))}
                   title="Alejar"
                 >
                   −
@@ -442,6 +650,20 @@ function App() {
           onRestablecer={restablecerParametros}
           onCerrar={cerrarMenu}
         />
+      )}
+      {popupFecha && (
+        <div className="popup-fecha" style={{ left: popupFecha.x, top: popupFecha.y + 6 }}>
+          <input
+            ref={inputFecha}
+            type="date"
+            defaultValue={popupFecha.valor}
+            onChange={(ev) => aplicarFecha(ev.currentTarget.value)}
+            onKeyDown={(ev) => {
+              if (ev.key === "Enter") aplicarFecha(ev.currentTarget.value);
+            }}
+          />
+          <span className="popup-fecha-ayuda">Enter aplica · Esc cierra</span>
+        </div>
       )}
     </div>
   );

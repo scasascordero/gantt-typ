@@ -177,6 +177,7 @@
   ancho-linea-tiempo: auto, // longitud, o `auto`: 20cm si pagina:true, o el ancho disponible si pagina:false
   alto-fila: 0.6cm,
   margen: 1cm,
+  margenes: true,
   pagina: true,             // true: página propia autodimensionada (uso independiente) | false: se inserta en el flujo del documento actual, sin tocar el tamaño de página
   fuente: "Liberation Sans",
   tamano-fuente: 8pt,
@@ -698,10 +699,11 @@
     context {
       let contenido = construir(0pt)
       let tamano = measure(contenido)
+      let m = if margenes { margen } else { 0pt }
       set page(
-        width: tamano.width + 2 * margen,
-        height: tamano.height + 2 * margen,
-        margin: margen,
+        width: tamano.width + 2 * m,
+        height: tamano.height + 2 * m,
+        margin: m,
       )
       contenido
     }

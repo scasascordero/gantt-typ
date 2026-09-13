@@ -420,6 +420,7 @@ Opciones principales:
 | `alto-fila` | una longitud | `0.6cm` | Alto de cada fila |
 | `pagina` | `true` \| `false` | `true` | `true`: la carta crea y autodimensiona su propia página (uso independiente). `false`: se inserta como contenido normal en el documento actual (ver "Insertar en un documento" más abajo) |
 | `margen` | una longitud, o un dict como `(x: 1cm, y: 1.5cm)` | `1cm` | Margen de página (los 4 lados); solo aplica si `pagina: true` |
+| `margenes` | `true` \| `false` | `true` | Si `true`, aplica el margen de la página; si `false`, el chart ocupa exactamente su contenido sin margen extra. Solo aplica si `pagina: true` |
 | `fuente` | nombre de una fuente instalada, p. ej. `"Liberation Sans"` | `"Liberation Sans"` | Tipografía |
 | `tamano-fuente` | una longitud, p. ej. `9pt` | `8pt` | Tamaño de letra base |
 | `indent-por-nivel` | una longitud | `0.4cm` | Sangría por nivel de subtarea |

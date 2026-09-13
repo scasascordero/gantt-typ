@@ -4,4 +4,5 @@
 #carta-gantt(
   datos,
   mostrar-columnas: ("inicio", "termino", "duracion", "avance"),
+  margenes: false,
 )

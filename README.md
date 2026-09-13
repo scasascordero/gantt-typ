@@ -357,9 +357,30 @@ Notas:
 - `read`/`yaml` solo cargan rutas **relativas al documento** (el sandbox de
   Typst no permite rutas absolutas de tu disco), pero el URI de salto se
   fabrica como cadena, así que la ruta absoluta puede escribirse a mano.
-- El visor del PDF debe ejecutar enlaces con esquema personalizado
-  (SumatraPDF, PDF-XChange, Okular...). **Edge y Chrome bloquean los
-  `vscode://` dentro de un PDF**, como medida de seguridad.
+- El visor del PDF debe ejecutar enlaces con esquema personalizado (ver
+  abajo). **Edge y Chrome bloquean los `vscode://`/`vscodium://` dentro de
+  un PDF**, como medida de seguridad.
+- **SumatraPDF** tiene su propia lista blanca de protocolos: por defecto solo
+  `http,https,mailto`. Para que `vscodium://` (o `vscode://`) funcione,
+  crea `sumatrapdfrestrict.ini` **en la misma carpeta de SumatraPDF.exe**
+  (y reinícialo). Ojo: si creas ese archivo, toda opción no listada queda
+  en `0`, así que copia la plantilla completa de
+  `docs/sumatrapdfrestrict.ini` y solo agrega el esquema:
+  ```ini
+  [Policies]
+  InternetAccess = 1
+  DiskAccess = 1
+  SavePreferences = 1
+  RegistryAccess = 1
+  PrinterAccess = 1
+  CopySelection = 1
+  FullscreenAccess = 1
+  LinkProtocols = http,https,mailto,vscodium,vscode
+  SafeFileTypes = audio,video,webpage
+  ```
+- En SumatraPDF los enlaces se abren con **un clic**; con
+  `EnableTeXEnhancements = true` el doble clic está reservado para la
+  búsqueda inversa de SyncTeX y no sigue enlaces.
 
 ## Leer desde Excel
 

@@ -1,7 +1,7 @@
 // ejemplo-cpm.typ
-// Cartas Gantt con CPM: las fechas de B y D se CALCULAN desde sus
-// predecesoras (no llevan 'inicio'), y la ruta crítica (B -> D) se resalta
-// en rojo con flechas de dependencia.
+// Cartas Gantt con CPM: las fechas de B, C y D se CALCULAN desde sus
+// predecesoras (no llevan 'inicio'), y la ruta crítica (A -> B -> D) se
+// resalta en rojo con flechas de dependencia.
 //
 // La red de ejemplo:
 //   A: inicio fijo 2026-01-05, duración 5        (ancla)
@@ -9,7 +9,7 @@
 //   C: duración 3, depende de A con ss + 2dias    -> inicia "2026-01-07"
 //   D: duración 2, depende de B y C (fs)          -> inicia "2026-01-14"
 //
-// Ruta crítica: B -> D (holgura 0). Holguras: A=5, C=6.
+// Ruta crítica: A -> B -> D (holgura 0). Holgura de C: 4 (no crítica).
 // Las comprobaciones con #assert corren al compilar: si fallan, la
 // compilación de este archivo falla (es la prueba del motor CPM).
 
@@ -32,11 +32,11 @@
 #assert(fila("D").termino-temprano-dias == a-dia-juliano("2026-01-15"), message: "D debería terminar el 2026-01-15")
 
 // --- Comprobaciones del pase hacia atrás (holguras y ruta crítica) -------
-#assert(fila("A").holgura == 5, message: "A debería tener holgura 5")
+#assert(fila("A").holgura == 0, message: "A debería tener holgura 0 (ruta crítica)")
 #assert(fila("B").holgura == 0, message: "B debería estar en ruta crítica")
-#assert(fila("C").holgura == 6, message: "C debería tener holgura 6")
+#assert(fila("C").holgura == 4, message: "C debería tener holgura 4")
 #assert(fila("D").holgura == 0, message: "D debería estar en ruta crítica")
-#assert(fila("A").critico == false, message: "A no es crítica")
+#assert(fila("A").critico == true, message: "A es crítica")
 #assert(fila("B").critico == true, message: "B debería ser crítica")
 #assert(fila("C").critico == false, message: "C no es crítica")
 #assert(fila("D").critico == true, message: "D debería ser crítica")

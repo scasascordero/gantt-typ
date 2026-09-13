@@ -14,6 +14,7 @@ lib/
   typst.toml   -> manifiesto del paquete local @local/gantt:0.1.0
   fechas.typ   -> aritmética de fechas (parseo, suma/resta de días, formato)
   datos.typ    -> lectura y normalización de tareas (jerarquía, rollup)
+  cpm.typ      -> motor CPM: pase hacia adelante/atrás, holguras, ruta crítica
   dibujo.typ   -> primitivas de dibujo (linea, caja, rombo, texto)
   gantt.typ    -> función pública carta-gantt() (entrypoint del paquete)
 ejemplos/
@@ -26,6 +27,7 @@ ejemplos/
   ejemplo-avance-serie.typ    -> avance como serie de incrementos acumulados
   ejemplo-columnas.typ        -> columnas de datos (inicio, término, duración, avance)
   ejemplo-insertado.typ       -> pagina: false, insertada en un documento con su propia página
+  ejemplo-cpm.typ             -> CPM: fechas calculadas desde predecesoras + ruta crítica + flechas
 herramientas/
   xlsx_a_datos.py              -> conversor opcional Excel -> yaml/csv
 ```
@@ -45,8 +47,8 @@ refleja al instante, sin reinstalar nada). En Windows, con PowerShell:
 
 ```powershell
 New-Item -ItemType SymbolicLink `
-  -Path "$env:APPDATA\typst\packages\local\gantt\0.1.0" `
-  -Target "E:\Dropbox\Sandbox\Gantt_typ\lib"
+  -Path "$env:LOCALAPPDATA\typst\packages\local\gantt\0.1.0" `
+  -Target "D:\Gantt_typ\lib"
 ```
 
 (Ajusta la ruta `-Target` a donde tengas este proyecto.) Si el comando
@@ -154,10 +156,13 @@ obligatorias en una tarea sin subtareas):
 | `padre`    | `codigo` de la tarea madre (para subtareas en formato plano/Excel)       |
 | `subtareas`| Lista anidada de tareas hijas (alternativa a `padre`, cómoda en YAML)    |
 | `hito`     | `true` para forzar que se dibuje como hito (rombo) aunque tenga duración |
+| `predecesoras` | Dependencias para el CPM (ver "CPM") — solo tiene efecto con `cpm: true` |
 
 Basta con **inicio + duracion**, o **inicio + termino** — lo que falte se
 calcula solo. Si no se da ni `duracion` ni `termino`, la tarea se dibuja
-como **hito** (rombo).
+como **hito** (rombo). Con `cpm: true`, `inicio` deja de ser obligatorio
+para las tareas que tienen `predecesoras`: su arranque se **calcula** desde
+la red (ver sección siguiente).
 
 ### Subtareas y "rollup" automático
 
@@ -231,6 +236,88 @@ codigo,nombre,duracion,inicio,termino,avance,padre
 2,Hito: permisos aprobados,,2026-03-18,,,
 ```
 
+## CPM: ruta crítica y dependencias
+
+Con `cpm: true` la librería **calcula las fechas de las tareas desde sus
+dependencias** en vez de pedir `inicio` explícito. Para cada tarea se
+obtienen el inicio/termino temprano y tardío (`inicio-temprano-dias`,
+`termino-temprano-dias`, `inicio-tardio-dias`, `termino-tardio-dias`), la
+**holgura** (días que puede demorar sin afectar el final del proyecto) y el
+flag `critico` (holgura 0 → ruta crítica), y se pueden dibujar **flechas de
+dependencia** entre las barras.
+
+### Campo `predecesoras`
+
+Cada tarea puede declarar una o más predecesoras. El formato admite:
+
+- En YAML/tipado, una lista de textos `"codigo[:tipo[:lag]]"`, o de mapas
+  `{ codigo, tipo, lag }`:
+  ```yaml
+  tareas:
+    - codigo: B
+      nombre: Obra gruesa
+      duracion: 4
+      predecesoras: ["A"]
+    - codigo: C
+      nombre: Compras
+      duracion: 3
+      predecesoras: ["A:ss:2"]
+    - codigo: D
+      nombre: Techado
+      duracion: 2
+      predecesoras: ["B;C"]
+  ```
+- En CSV/Excel, texto separado por `;` en la columna `predecesoras`:
+  ```csv
+  codigo,nombre,duracion,predecesoras
+  B,Obra gruesa,4,"A"
+  C,Compras,3,"A:ss:2"
+  D,Techado,2,"B;C"
+  ```
+
+Tipos de dependencia (`tipo`, por defecto `fs`):
+
+| Tipo | Significado                              |
+|------|------------------------------------------|
+| `fs` | **fin a inicio**: la sucesora empieza el día siguiente al fin de la predecesora (o `lag` días después) |
+| `ss` | **inicio a inicio**: la sucesora no empieza antes del inicio de la predecesora + `lag` |
+| `ff` | **fin a fin**: la sucesora no termina antes del fin de la predecesora + `lag` |
+| `sf` | **inicio a fin**: la sucesora no termina antes del inicio de la predecesora + `lag` |
+
+`lag` es un entero (días, puede ser negativo para adelantar). Internamente
+todo se trabaja con "día juliano" (número entero consecutivo); una tarea de
+duración `d` que empieza el día `es` termina el día `es + d − 1`.
+
+### Fechas de referencia y anclas
+
+- Las tareas **sin predecesoras** y **con `inicio`/`termino` explícito**
+  son "anclas": su fecha es fija y de ellas cuelga el resto.
+- Si además se pasa `inicio-proyecto`, se usa como arranque base; si se pasa
+  `termino-proyecto`, fija el fin del proyecto para el cómputo de holguras.
+  Sin ellos, se toman del mínimo/máximo calculado.
+- **Los hitos** (sin duración) duran 1 día.
+
+### Ruta crítica
+
+Se pinta de rojo (`color-critico`) si `resaltar-critico: true` (por
+defecto). Las flechas entre barras se dibujan con `mostrar-dependencias:
+true` (por defecto) en `color-dependencia`. Las columnas de la tabla de
+datos admiten además `inicio-temprano`, `termino-temprano`,
+`inicio-tardio`, `termino-tardio`, `holgura` y `critico`.
+
+### Reglas con jerarquías
+
+- **Solo participan en la red las tareas hoja** (sin subtareas): las tareas
+  con hijas son "sobres" y no aparecen como predecesoras/sucesoras.
+- Una tarea con subtareas es **crítica si alguna de sus hijas lo es**; su
+  `holgura` queda indefinida.
+- Una `predecesoras` que apunte a una tarea desconocida o a una tarea con
+  subtareas detiene la compilación con un `assert` (para cazar datos mal
+  escritos), y una **red con ciclos** falla con un `panic` que lista las
+  tareas involucradas.
+
+Ver [ejemplos/ejemplo-cpm.typ](ejemplos/ejemplo-cpm.typ).
+
 ## Leer desde Excel
 
 Typst no puede abrir `.xlsx` directamente (no es una función nativa), así
@@ -275,7 +362,7 @@ Opciones principales:
 | `color-tarea`, `color-grupo`, `color-hito`, `color-texto`, `color-rejilla` | un color, p. ej. `rgb("#2563eb")`, `blue`, `luma(40%)` | paleta azul/gris/rojo | Colores por defecto de cada elemento |
 | `color-calendario` | un color | `rgb("#f8fafc")` (gris muy suave) | Relleno de fondo de las bandas del calendario (año/mes/semana/día) |
 | `color-avance` | un color | `rgb("#6b7280")` (gris) | Color de la barra de avance |
-| `color` | `none` \| función `(fila) -> color` | `none` | Colorear a medida; `fila` trae `codigo`, `nombre`, `nivel`, `es-grupo`, `hito`, `inicio-dias`, `termino-dias`, `duracion`, `avance` |
+| `color` | `none` \| función `(fila) -> color` | `none` | Colorear a medida; `fila` trae `codigo`, `nombre`, `nivel`, `es-grupo`, `hito`, `inicio-dias`, `termino-dias`, `duracion`, `avance` y, si el CPM está activo, `holgura`, `critico` y `predecesoras` |
 | `mostrar-codigo` | `true` \| `false` | `true` | Antepone `codigo. ` al nombre de cada tarea |
 | `mostrar-duracion` | `true` \| `false` | `false` | Muestra la duración (p. ej. `10d`) a la derecha de cada barra |
 | `mostrar-barra-grupo` | `true` \| `false` | `true` | Si es `false`, las tareas con subtareas **no dibujan ninguna barra/línea** en la línea de tiempo (solo se ve su nombre y sus hijas) |
@@ -288,7 +375,14 @@ Opciones principales:
 | `nivel-semana` | `auto` (se activa si la ventana visible dura ≤ 200 días) \| `true` \| `false` | `auto` | Muestra u oculta la banda de semanas (bloques de 7 días numerados `S1, S2, ...` desde el inicio de la ventana) |
 | `nivel-dia` | `auto` (se activa si la ventana visible dura ≤ 45 días) \| `true` \| `false` | `auto` | Muestra u oculta la banda de días; si la columna de cada día queda muy angosta se sigue dibujando la rejilla pero se omite el número |
 | `mostrar-dia-inicio-semana` | `true` \| `false` | `false` | En la banda de semanas, agrega el día del mes en que arranca cada semana, alineado a la izquierda de su celda (junto al `S1`, `S2`, ... centrado) |
-| `mostrar-columnas` | una lista con cualquier subconjunto y orden de `("duracion", "inicio", "termino", "avance")` | `()` (ninguna) | Agrega columnas de datos entre el nombre y la línea de tiempo, con ancho automático; `inicio`/`termino` se muestran como `DD-MM-AAAA` y `avance` como porcentaje entero |
+| `mostrar-columnas` | una lista con cualquier subconjunto y orden de `("duracion", "inicio", "termino", "avance", "inicio-temprano", "termino-temprano", "inicio-tardio", "termino-tardio", "holgura", "critico")` | `()` (ninguna) | Agrega columnas de datos entre el nombre y la línea de tiempo, con ancho automático; `inicio`/`termino` se muestran como `DD-MM-AAAA` y `avance` como porcentaje entero |
+| `cpm` | `true` \| `false` | `false` | Activa el motor CPM: calcula las fechas desde `predecesoras` (ver "CPM") |
+| `inicio-proyecto` | `none` \| `"AAAA-MM-DD"` | `none` | Fecha base del proyecto para el CPM, cuando no sale sola de las anclas |
+| `termino-proyecto` | `none` \| `"AAAA-MM-DD"` | `none` | Fecha de fin del proyecto para el CPM (referencia de las holguras), cuando no sale sola |
+| `resaltar-critico` | `true` \| `false` | `true` | Pinta de `color-critico` las tareas con holgura 0 |
+| `color-critico` | un color | `rgb("#dc2626")` (rojo) | Color de la ruta crítica |
+| `mostrar-dependencias` | `true` \| `false` | `true` | Dibuja flechas "elbow" desde el término de cada predecesora hasta el inicio de su sucesora |
+| `color-dependencia` | un color | `rgb("#64748b")` (gris) | Color de las flechas de dependencia |
 | `mostrar-niveles` | `auto` (todos) \| entero ≥ 1 | `auto` | Muestra solo los primeros N niveles de la jerarquía; el resto de las subtareas se ocultan por completo (no solo su barra). Una tarea que se queda sin hijas visibles se dibuja como si nunca hubiera tenido subtareas |
 | `mostrar-serie-avance` | `true` \| `false` | `true` | Si `avance` es una serie, `true` la dibuja como bloques arriba/abajo (ver "Avance como serie de incrementos"); `false` ignora la serie y dibuja un solo bloque con el avance total |
 
@@ -328,12 +422,14 @@ pases se resuelve relativa a la librería instalada, no a tu archivo — es
 decir, dejan de encontrar tu archivo de datos en cuanto la librería vive
 en otro lado (como ahora, que es un paquete `@local`).
 
-### `preparar-tareas(datos-crudos)`
+### `preparar-tareas(datos-crudos, cpm: false, inicio-proyecto: none, termino-proyecto: none)`
 
 Aplana la jerarquía, calcula fechas/duración/avance faltantes (con
 rollup) y devuelve la lista final en orden de dibujo. `carta-gantt` la
 llama automáticamente si detecta datos crudos, así que normalmente no
-hace falta invocarla a mano.
+hace falta invocarla a mano. Con `cpm: true` cada fila lleva además
+`inicio-temprano-dias`, `termino-temprano-dias`, `inicio-tardio-dias`,
+`termino-tardio-dias`, `holgura`, `critico` y `predecesoras`.
 
 ## Detalles de diseño
 

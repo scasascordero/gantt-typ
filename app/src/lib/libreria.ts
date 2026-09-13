@@ -66,13 +66,17 @@ export interface VistaTipografiada {
   milis: number;
 }
 
-export async function compilarSvg(yamlTexto: string): Promise<VistaTipografiada> {
+export async function compilarSvg(
+  yamlTexto: string,
+  mainTyp?: string,
+): Promise<VistaTipografiada> {
   const t0 = performance.now();
   await runtime();
   if (!compiler || !renderer) return { svg: null, errores: ["motor no iniciado"], milis: 0 };
 
   try {
     compiler.mapShadow("/datos.yaml", new TextEncoder().encode(yamlTexto));
+    compiler.addSource("/main.typ", mainTyp ?? plantillaViz);
   } catch {
     return { svg: null, errores: ["no se pudo inyectar datos.yaml"], milis: performance.now() - t0 };
   }

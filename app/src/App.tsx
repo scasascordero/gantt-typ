@@ -5,9 +5,11 @@ import { EditorView } from "@codemirror/view";
 import { yaml } from "@codemirror/lang-yaml";
 import { invoke } from "@tauri-apps/api/core";
 import ejemploDatos from "../../ejemplos/datos.yaml?raw";
-import { compilarSvg, plantillaExportar, fuentesLibreria } from "./lib/libreria";
+import { compilarSvg, fuentesLibreria } from "./lib/libreria";
 import { analizarSvg } from "./lib/geometria";
 import { listarTareas } from "./lib/yamlLineas";
+import { generarMainTyp, valoresDefault, type Valor } from "./lib/params";
+import MenuParametros from "./MenuParametros";
 import "./App.css";
 
 function App() {
@@ -18,6 +20,10 @@ function App() {
   const [exportando, setExportando] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [zoom, setZoom] = useState(1);
+  const [parametros, setParametros] = useState<Record<string, Valor>>(() => valoresDefault());
+  const [menuAbierto, setMenuAbierto] = useState(false);
+
+  const mainTyp = useMemo(() => generarMainTyp(parametros), [parametros]);
 
   const editorRef = useRef<EditorView | null>(null);
   const contenedorEditor = useRef<HTMLDivElement | null>(null);
@@ -48,7 +54,7 @@ function App() {
   useEffect(() => {
     let vivo = true;
     const temporizador = window.setTimeout(async () => {
-      const r = await compilarSvg(texto);
+      const r = await compilarSvg(texto, mainTyp);
       if (!vivo) return;
       setSvg(r.svg);
       setErrores(r.errores);
@@ -58,7 +64,7 @@ function App() {
       vivo = false;
       window.clearTimeout(temporizador);
     };
-  }, [texto]);
+  }, [texto, mainTyp]);
 
   useEffect(() => {
     const caja = svgCaja.current;
@@ -129,13 +135,26 @@ function App() {
     [indiceDePunto, saltarATarea],
   );
 
+  const abrirMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setMenuAbierto(true);
+  }, []);
+
+  const cerrarMenu = useCallback(() => setMenuAbierto(false), []);
+  const cambiarParametro = useCallback(
+    (clave: string, valor: Valor) =>
+      setParametros((prev) => ({ ...prev, [clave]: valor })),
+    [],
+  );
+  const restablecerParametros = useCallback(() => setParametros(valoresDefault()), []);
+
   const exportarPdf = async () => {
     setExportando(true);
     setMensaje("");
     try {
       const ruta = await invoke<string>("exportar_pdf", {
         yaml: textoRef.current,
-        plantilla: plantillaExportar(),
+        plantilla: generarMainTyp(parametros),
         fuentes: fuentesLibreria(),
       });
       setMensaje(`PDF exportado: ${ruta}`);
@@ -200,6 +219,7 @@ function App() {
                 ref={svgCaja}
                 className="svg-contenedor"
                 onClick={alClicSvg}
+                onContextMenu={abrirMenu}
               >
                 <div
                   dangerouslySetInnerHTML={{ __html: svg }}
@@ -219,6 +239,14 @@ function App() {
           )}
         </section>
       </main>
+      {menuAbierto && (
+        <MenuParametros
+          valores={parametros}
+          onCambiar={cambiarParametro}
+          onRestablecer={restablecerParametros}
+          onCerrar={cerrarMenu}
+        />
+      )}
     </div>
   );
 }

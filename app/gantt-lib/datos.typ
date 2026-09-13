@@ -81,22 +81,50 @@
 }
 
 // Interpreta el valor crudo de "avance". Puede ser:
-//  - un número (o texto con un número), como hasta ahora;
+//  - un número o texto: 0.1, 10, "10", "10%" o "10 %" (0-1 o 0-100,
+//    automático; el sufijo % siempre divide entre 100);
 //  - una "serie" de incrementos que se van acumulando a lo largo de la
-//    tarea: una lista en YAML (avance: (0.1, 0.2, 0.15, 0.2)) o texto con
-//    punto y coma en CSV/Excel (avance: "0.1;0.2;0.15;0.2").
+//    tarea: una lista en YAML (avance: (0.1, 0.2, 0.15, 0.2),
+//    avance: ("10%", "20%", "15%", "20%")) o texto con punto y coma en
+//    CSV/Excel (avance: "0.1;0.2;0.15;0.2" o "10%;20%;15%;20%").
 // En ambos casos el avance final (para el rollup y para el % mostrado)
 // es la suma de la serie. Retorna (avance: número 0-1, serie: lista o none).
+
+// Convierte un único valor crudo a fracción 0-1.
+#let a-avance(v, defecto: 0) = {
+  if es-vacio(v) {
+    defecto
+  } else {
+    let es-pct = false
+    let num = v
+    if type(v) == str {
+      let s = v.trim()
+      if s.len() > 0 and s.slice(s.len() - 1) == "%" {
+        es-pct = true
+        s = s.slice(0, s.len() - 1).trim()
+      }
+      num = s
+    }
+    let valor = a-numero(num, defecto: defecto)
+    if es-pct {
+      valor / 100
+    } else if valor > 1 {
+      valor / 100
+    } else {
+      valor
+    }
+  }
+}
+
 #let interpretar-avance(valor, defecto: 0) = {
-  let normalizar(v) = if v > 1 { v / 100 } else { v }
   if type(valor) == array {
-    let serie = valor.map(v => normalizar(a-numero(v, defecto: 0)))
+    let serie = valor.map(v => a-avance(v, defecto: 0))
     (avance: calc.min(serie.sum(default: 0), 1), serie: serie)
   } else if type(valor) == str and valor.contains(";") {
-    let serie = valor.split(";").map(s => normalizar(float(s.trim())))
+    let serie = valor.split(";").map(s => a-avance(s, defecto: 0))
     (avance: calc.min(serie.sum(default: 0), 1), serie: serie)
   } else {
-    (avance: normalizar(a-numero(valor, defecto: defecto)), serie: none)
+    (avance: a-avance(valor, defecto: defecto), serie: none)
   }
 }
 

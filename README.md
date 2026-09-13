@@ -155,7 +155,7 @@ obligatorias en una tarea sin subtareas):
 | `duracion` | Duración en días (entero)                                                |
 | `inicio`   | Fecha de inicio, `"AAAA-MM-DD"`                                          |
 | `termino`  | Fecha de término, `"AAAA-MM-DD"`                                         |
-| `avance`   | 0–1 (o 0–100, se detecta automáticamente), **o una serie de incrementos** — ver abajo |
+| `avance`   | 0–1, 0–100 o `"10%"` (se detecta automáticamente), **o una serie de incrementos** — ver abajo |
 | `padre`    | `codigo` de la tarea madre (para subtareas en formato plano/Excel)       |
 | `subtareas`| Lista anidada de tareas hijas (alternativa a `padre`, cómoda en YAML)    |
 | `hito`     | `true` para forzar que se dibuje como hito (rombo) aunque tenga duración |
@@ -192,11 +192,17 @@ lista en YAML, o como texto separado por `;` en CSV/Excel:
 
 ```yaml
 avance: [0.1, 0.2, 0.15, 0.2]   # 10% + 20% + 15% + 20% = 65% en total
+avance: ["10%", "20%", "15%", "20%"]   # igual, escribiendo % explícito
 ```
 ```csv
 avance
 0.1;0.2;0.15;0.2
+10%;20%;15%;20%
 ```
+
+En cualquier forma (número único o serie, YAML o CSV) los valores pueden
+escribirse como fracción (`0.1`), como 0–100 (`10`) o con porcentaje
+explícito (`"10%"` o `"10 %"`); todos significan lo mismo.
 
 El avance final (el que ves en la columna `avance` o en el rollup de la
 tarea madre) es la suma de la serie — en el ejemplo, 65%. La barra de

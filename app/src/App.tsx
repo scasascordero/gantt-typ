@@ -17,7 +17,6 @@ function App() {
   const [milis, setMilis] = useState(0);
   const [exportando, setExportando] = useState(false);
   const [mensaje, setMensaje] = useState("");
-  const [indiceCursor, setIndiceCursor] = useState(-1);
 
   const editorRef = useRef<EditorView | null>(null);
   const contenedorEditor = useRef<HTMLDivElement | null>(null);
@@ -63,12 +62,6 @@ function App() {
   const tareas = useMemo(() => listarTareas(texto), [texto]);
   const geometria = useMemo(() => (svg ? analizarSvg(svg) : null), [svg]);
 
-  const pxPorPt = useMemo(() => {
-    const caja = svgCaja.current;
-    if (!caja || !geometria || !geometria.ancho) return 1;
-    return caja.clientWidth / geometria.ancho;
-  }, [svg, geometria]);
-
   const saltarATarea = useCallback(
     (indice: number) => {
       const v = editorRef.current;
@@ -106,12 +99,6 @@ function App() {
     },
     [indiceDePunto, saltarATarea],
   );
-
-  const alMoverSvg = useCallback((e: React.MouseEvent) => {
-    setIndiceCursor(indiceDePunto(e));
-  }, [indiceDePunto]);
-
-  const salirSvg = () => setIndiceCursor(-1);
 
   const exportarPdf = async () => {
     setExportando(true);
@@ -162,26 +149,9 @@ function App() {
           {svg && geometria ? (
             <div
               ref={svgCaja}
-              className={`svg-contenedor${indiceCursor >= 0 ? " con-cursor" : ""}`}
+              className="svg-contenedor"
               onClick={alClicSvg}
-              onMouseMove={alMoverSvg}
-              onMouseLeave={salirSvg}
             >
-              {indiceCursor >= 0 && geometria.bandas[indiceCursor] && (
-                <div
-                  className="resalte-fila"
-                  style={{
-                    top: `${geometria.bandas[indiceCursor].y0 * pxPorPt}px`,
-                    height: `${(geometria.bandas[indiceCursor].y1 - geometria.bandas[indiceCursor].y0) * pxPorPt}px`,
-                    left: 0,
-                    right: 0,
-                  }}
-                >
-                  <span className="etiqueta-fila">
-                    {tareas[indiceCursor]?.nombre ?? `tarea ${indiceCursor + 1}`} →
-                  </span>
-                </div>
-              )}
               <div dangerouslySetInnerHTML={{ __html: svg }} className="svg-hoja" />
             </div>
           ) : (

@@ -27,7 +27,7 @@
     codigo: "1",
     nombre: "Ingeniería y permisos",
     subtareas: (
-      (codigo: "1.1", nombre: "Levantamiento geotécnico", inicio: "2026-01-05", duracion: 30),
+      (codigo: "1.1", nombre: "Levantamiento geotécnico", inicio: "2026-01-05", duracion: 90),
       (codigo: "1.2", nombre: "Ingeniería básica", duracion: 80, predecesoras: "1.1"),
       (codigo: "1.3", nombre: "Ingeniería de detalle", duracion: 120, predecesoras: "1.2"),
       (codigo: "1.4", nombre: "Revisión de constructibilidad", duracion: 30, predecesoras: "1.3"),

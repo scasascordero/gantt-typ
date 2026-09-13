@@ -1,0 +1,29 @@
+# tareas-vinculos.yaml — datos de ejemplo para mostrar el salto codigo -> línea.
+# Cada tarea se enlaza (clic en el PDF) a la línea donde aparece su `codigo`.
+tareas:
+  - codigo: "1"
+    nombre: "Frente logístico"
+    subtareas:
+      - codigo: "1.1"
+        nombre: "Adquisición de materiales"
+        inicio: "2026-02-02"
+        duracion: 30
+      - codigo: "1.2"
+        nombre: "Traslado a faena"
+        duracion: 12
+        predecesoras: "1.1"
+  - codigo: "2"
+    nombre: "Frente de montaje"
+    subtareas:
+      - codigo: "2.1"
+        nombre: "Montaje de equipos A"
+        duracion: 25
+        predecesoras: "1.2"
+      - codigo: "2.2"
+        nombre: "Montaje de equipos B"
+        duracion: 20
+        predecesoras: "2.1"
+      - codigo: "2.3"
+        nombre: "Pruebas y arranque"
+        duracion: 15
+        predecesoras: "2.2"

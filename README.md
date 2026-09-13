@@ -29,6 +29,8 @@ ejemplos/
   ejemplo-insertado.typ       -> pagina: false, insertada en un documento con su propia página
   ejemplo-cpm.typ             -> CPM: fechas calculadas desde predecesoras + ruta crítica + flechas
   ejemplo-cpm-proyecto.typ    -> CPM a 2 años (~20 tareas en 4 frentes), cabecera solo años y meses
+  ejemplo-vinculos.typ        -> clic en una tarea -> salta a su línea en tareas-vinculos.yaml (VS Code)
+  tareas-vinculos.yaml        -> datos de ejemplo del salto a línea
 herramientas/
   xlsx_a_datos.py              -> conversor opcional Excel -> yaml/csv
 ```
@@ -158,6 +160,7 @@ obligatorias en una tarea sin subtareas):
 | `subtareas`| Lista anidada de tareas hijas (alternativa a `padre`, cómoda en YAML)    |
 | `hito`     | `true` para forzar que se dibuje como hito (rombo) aunque tenga duración |
 | `predecesoras` | Dependencias para el CPM (ver "CPM") — solo tiene efecto con `cpm: true` |
+| `vinculo`      | URI (p. ej. `vscode://file/...`) con el que se vuelve clicable la fila (nombre, celdas y barra) para abrir la línea correspondiente en tu editor — ver "Salto a línea en el editor" |
 
 Basta con **inicio + duracion**, o **inicio + termino** — lo que falte se
 calcula solo. Si no se da ni `duracion` ni `termino`, la tarea se dibuja
@@ -319,6 +322,44 @@ datos admiten además `inicio-temprano`, `termino-temprano`,
 
 Ver [ejemplos/ejemplo-cpm.typ](ejemplos/ejemplo-cpm.typ).
 
+## Salto a línea en el editor (VS Code / VSCodium)
+
+Para que un clic en el PDF abra la **línea correspondiente** de tus datos
+(un YAML, o el propio `.typ`), se usa el URI handler nativo del editor:
+`vscode://file/<ruta>:<linea>` (VS Code) o `vscodium://file/<ruta>:<linea>`
+(VSCodium). La librería ofrece:
+
+- `url-vscode(archivo, linea, esquema: "vscode")` — fabrica el URI
+  (codifica `:`, espacios, `#`, etc.; `esquema: "vscodium"` para VSCodium).
+- `vinculos-desde-texto(texto, archivo, esquema: "vscode")` — escanea el
+  texto y devuelve un dict `codigo -> URI` apuntando a la primera línea
+  donde aparece cada `codigo` (funciona con YAML o Typst; las menciones en
+  `predecesoras` no crean vínculos porque solo cuentan las líneas con la
+  llave `codigo`).
+- Opción `vinculos:` de `carta-gantt` — recibe ese dict y hace clicables las
+  filas (nombre, celdas de datos y barra). El campo `vinculo` por tarea
+  tiene prioridad.
+
+Uso típico (ver [ejemplos/ejemplo-vinculos.typ](ejemplos/ejemplo-vinculos.typ)):
+
+```typst
+#import "@local/gantt:0.1.0": carta-gantt, vinculos-desde-texto
+
+#let ruta-lectura = "tareas.yaml"              // para LEER: ruta relativa al documento
+#let ruta-editor  = "C:/mi/trabajo/tareas.yaml" // para el URI: ruta ABSOLUTA (VS Code no abre relativas)
+#carta-gantt(yaml(ruta-lectura),
+  vinculos: vinculos-desde-texto(read(ruta-lectura), ruta-editor))
+```
+
+Notas:
+
+- `read`/`yaml` solo cargan rutas **relativas al documento** (el sandbox de
+  Typst no permite rutas absolutas de tu disco), pero el URI de salto se
+  fabrica como cadena, así que la ruta absoluta puede escribirse a mano.
+- El visor del PDF debe ejecutar enlaces con esquema personalizado
+  (SumatraPDF, PDF-XChange, Okular...). **Edge y Chrome bloquean los
+  `vscode://` dentro de un PDF**, como medida de seguridad.
+
 ## Leer desde Excel
 
 Typst no puede abrir `.xlsx` directamente (no es una función nativa), así
@@ -384,6 +425,7 @@ Opciones principales:
 | `color-critico` | un color | `rgb("#dc2626")` (rojo) | Color de la ruta crítica |
 | `mostrar-dependencias` | `true` \| `false` | `true` | Dibuja flechas "elbow" desde el término de cada predecesora hasta el inicio de su sucesora |
 | `color-dependencia` | un color | `rgb("#64748b")` (gris) | Color de las flechas de dependencia |
+| `vinculos` | `none` \| dict `(codigo: "vscode://file/...:linea", ...)` | `none` | Vuelve clicables las filas cuyo `codigo` esté en el dict (nombre, celdas de fecha y barra navegan a esa URI). El dict se arma con `vinculos-desde-texto` + `read` (ver "Salto a línea en el editor") |
 | `mostrar-niveles` | `auto` (todos) \| entero ≥ 1 | `auto` | Muestra solo los primeros N niveles de la jerarquía; el resto de las subtareas se ocultan por completo (no solo su barra). Una tarea que se queda sin hijas visibles se dibuja como si nunca hubiera tenido subtareas |
 | `mostrar-serie-avance` | `true` \| `false` | `true` | Si `avance` es una serie, `true` la dibuja como bloques arriba/abajo (ver "Avance como serie de incrementos"); `false` ignora la serie y dibuja un solo bloque con el avance total |
 

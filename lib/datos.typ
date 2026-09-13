@@ -373,6 +373,7 @@
       duracion: r.duracion,
       avance: calc.min(calc.max(r.avance, 0), 1),
       avance-serie: r.avance-serie,
+      vinculo: item.at("vinculo", default: none),
     )
     if not cpm { base }
     else {

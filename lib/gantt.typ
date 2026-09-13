@@ -31,6 +31,42 @@
 // indicado explícitamente el usuario (true/false).
 #let resolver-nivel(valor, valor-auto) = if valor == auto { valor-auto } else { valor }
 
+// --- Vínculos a editor (VS Code / VSCodium) --------------------------------
+// Convierte una ruta local en un URI `vscode://file/<ruta>:<linea>` (o
+// `vscodium://...`) que abre el archivo en la línea indicada. Windows:
+// la letra de unidad y los espacios se codifican (%3A, %20).
+#let url-vscode(archivo, linea, esquema: "vscode") = {
+  let ruta = archivo
+    .replace("\\", "/")
+    .replace("%", "%25")
+    .replace("#", "%23")
+    .replace("?", "%3F")
+    .replace("&", "%26")
+    .replace(":", "%3A")
+    .replace(" ", "%20")
+  esquema + "://file/" + ruta + ":" + str(linea)
+}
+
+// Escanea el TEXTO de un archivo de datos (YAML, Typst u otro que ponga los
+// códigos como `codigo: "1.1"`) y devuelve un diccionario `codigo -> URI del
+// editor` apuntando a la PRIMERA línea donde aparece cada código. No lee
+// archivos a sí misma: el llamador hace `read()` (la resolución de rutas
+// depende del archivo donde se compila, no de la librería) y le pasa el
+// texto. Las menciones en `predecesoras` no definen vínculos porque solo
+// cuentan las líneas que contienen la llave `codigo`.
+#let vinculos-desde-texto(texto, archivo, esquema: "vscode") = {
+  let salida = (:)
+  for (i, linea) in texto.replace("\r\n", "\n").split("\n").enumerate() {
+    if not linea.contains("codigo") { continue }
+    let partes = linea.split("\"")
+    if partes.len() < 2 { continue }
+    let token = partes.at(1)
+    if token == "" or token in salida { continue }
+    salida.insert(token, url-vscode(archivo, i + 1, esquema: esquema))
+  }
+  salida
+}
+
 #let meses-en-rango(dia-min, dia-max) = {
   let f0 = fecha-desde-dias(dia-min)
   let anio = f0.anio
@@ -173,6 +209,7 @@
   color-critico: rgb("#dc2626"),
   mostrar-dependencias: true, // true | false — dibuja flechas "elbow" entre predecesora y sucesora
   color-dependencia: rgb("#64748b"),
+  vinculos: none,            // none | dict codigo -> URI de editor (ver url-vscode / vinculos-desde-texto); cada fila con ese codigo se vuelve clicable y abre su línea
 ) = {
   let filas = tareas-listas(tareas, cpm: cpm, inicio-proyecto: inicio-proyecto, termino-proyecto: termino-proyecto)
   assert(filas.len() > 0, message: "carta-gantt: no hay tareas para dibujar.")
@@ -196,6 +233,20 @@
     })
   }
   assert(filas.len() > 0, message: "carta-gantt: mostrar-niveles dejó la lista de tareas vacía.")
+
+  // Vínculos a editor: el campo `vinculo` de la fila (si existe) manda; si
+  // no, se usa el dict `vinculos` (codigo -> URI). El dict lo construye el
+  // llamador con `vinculos-desde-texto` + `read` (la librería no lee
+  // archivos: el root de lectura le pertenece al documento que compila).
+  let filas = filas.map(f => {
+    let explicito = f.at("vinculo", default: none)
+    let desde-dict = if explicito == none and vinculos != none {
+      vinculos.at(f.codigo, default: none)
+    } else { none }
+    let v = if desde-dict != none { desde-dict } else { explicito }
+    if v == none { return f }
+    (: ..f, vinculo: v)
+  })
 
   let dia-min = if ventana-inicio != none { a-dia-juliano(ventana-inicio) } else {
     calc.min(..filas.map(f => f.inicio-dias))
@@ -452,6 +503,12 @@
           let y-centro = y-fila-top + alto-fila / 2
           let y-fila-bottom = y-fila-top + alto-fila
 
+          // Vínculo (opcional) de esta fila: si la tarea trae `vinculo`, su
+          // nombre, sus celdas de datos y su barra se vuelven clicables y
+          // abren la línea correspondiente en el editor.
+          let vinculo = f.at("vinculo", default: none)
+          let enlazar = if vinculo == none { cuerpo => cuerpo } else { cuerpo => link(vinculo)[#cuerpo] }
+
           // Nombre (con sangría por nivel de subtarea). El formato depende
           // del nivel (todas las tareas de primer nivel van en negrita,
           // el resto no), no de si la tarea en particular tiene o no
@@ -461,7 +518,7 @@
           let peso = if f.nivel == 0 { "bold" } else { "regular" }
           texto(
             x-nombre, y-centro,
-            text(weight: peso)[#prefijo#f.nombre],
+            enlazar(text(weight: peso)[#prefijo#f.nombre]),
             halign: "izquierda",
           )
 
@@ -469,7 +526,7 @@
           for (j, col) in mostrar-columnas.enumerate() {
             let cx1 = col-x-inicios.at(j)
             let cx2 = cx1 + anchos-columnas.at(j)
-            texto((cx1 + cx2) / 2, y-centro, text[#valor-columna(f, col)])
+            texto((cx1 + cx2) / 2, y-centro, enlazar(text[#valor-columna(f, col)]))
           }
 
           // Barra en la línea de tiempo. Las coordenadas "-real" son la
@@ -523,7 +580,14 @@
           // Duración, a la derecha de la barra (solo si el término real de
           // la tarea es visible dentro de la ventana).
           if mostrar-duracion and not f.hito and not fuera-de-ventana and x2-real <= ancho-total {
-            texto(x2-real + 0.1cm, y-centro, text(size: tamano-fuente * 0.85, fill: color-texto)[#f.duracion#{"d"}], halign: "izquierda")
+            texto(x2-real + 0.1cm, y-centro, enlazar(text(size: tamano-fuente * 0.85, fill: color-texto)[#f.duracion#{"d"}]), halign: "izquierda")
+          }
+
+          // Zona clicable de la barra (rectángulo transparente sobre el tramo
+          // visible de la línea de tiempo), para que el clic no dependa solo
+          // del texto del nombre.
+          if vinculo != none and not fuera-de-ventana {
+            place(top + left, dx: x1, dy: y-fila-top, enlazar(rect(width: x2 - x1, height: alto-fila, fill: none)))
           }
 
           // Separador horizontal.

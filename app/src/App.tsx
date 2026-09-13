@@ -17,6 +17,7 @@ function App() {
   const [milis, setMilis] = useState(0);
   const [exportando, setExportando] = useState(false);
   const [mensaje, setMensaje] = useState("");
+  const [zoom, setZoom] = useState(1);
 
   const editorRef = useRef<EditorView | null>(null);
   const contenedorEditor = useRef<HTMLDivElement | null>(null);
@@ -59,6 +60,18 @@ function App() {
     };
   }, [texto]);
 
+  useEffect(() => {
+    const caja = svgCaja.current;
+    if (!caja) return;
+    const alRueda = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setZoom((z) => Math.min(8, Math.max(0.2, z * (e.deltaY < 0 ? 1.12 : 1 / 1.12))));
+    };
+    caja.addEventListener("wheel", alRueda, { passive: false });
+    return () => caja.removeEventListener("wheel", alRueda);
+  }, [svg]);
+
   const tareas = useMemo(() => listarTareas(texto), [texto]);
   const geometria = useMemo(() => (svg ? analizarSvg(svg) : null), [svg]);
 
@@ -81,13 +94,29 @@ function App() {
     (e: React.MouseEvent) => {
       const caja = svgCaja.current;
       const g = geometria;
-      if (!caja || !g) return -1;
+      if (!caja || !g || !g.bandas.length) return -1;
       const s = caja.querySelector("svg");
-      if (!s) return -1;
+      if (!s || !g.ancho) return -1;
       const rect = s.getBoundingClientRect();
-      const escala = rect.width / g.ancho;
-      const py = (e.clientY - rect.top) / escala;
-      return g.bandas.findIndex((b) => py >= b.y0 && py < b.y1);
+      if (rect.width <= 0 || rect.height <= 0) return -1;
+      const py = (e.clientY - rect.top) * (g.ancho / rect.width);
+      const i = g.bandas.findIndex((b) => py >= b.y0 && py < b.y1);
+      if (i >= 0) return i;
+      const tol = 7;
+      let mejor = -1;
+      let menor = Infinity;
+      for (let k = 0; k < g.bandas.length; k++) {
+        const b = g.bandas[k];
+        const dentro = b.y0 <= py && py <= b.y1;
+        const d = dentro
+          ? 0
+          : Math.min(Math.abs(py - b.y0), Math.abs(py - b.y1));
+        if (d < menor) {
+          menor = d;
+          mejor = k;
+        }
+      }
+      return mejor >= 0 && menor <= tol ? mejor : -1;
     },
     [geometria],
   );
@@ -147,13 +176,38 @@ function App() {
 
         <section className="panel-preview">
           {svg && geometria ? (
-            <div
-              ref={svgCaja}
-              className="svg-contenedor"
-              onClick={alClicSvg}
-            >
-              <div dangerouslySetInnerHTML={{ __html: svg }} className="svg-hoja" />
-            </div>
+            <>
+              <div className="zoom-barra">
+                <button
+                  onClick={() => setZoom((z) => Math.max(0.2, z / 1.25))}
+                  title="Alejar"
+                >
+                  −
+                </button>
+                <button
+                  onClick={() => setZoom((z) => Math.min(8, z * 1.25))}
+                  title="Acercar"
+                >
+                  +
+                </button>
+                <button onClick={() => setZoom(1)} title="Ajustar al ancho">
+                  Ajustar
+                </button>
+                <span className="zoom-pct">{Math.round(zoom * 100)}%</span>
+                <span className="zoom-ayuda">Ctrl + rueda: zoom · clic: ir a la línea</span>
+              </div>
+              <div
+                ref={svgCaja}
+                className="svg-contenedor"
+                onClick={alClicSvg}
+              >
+                <div
+                  dangerouslySetInnerHTML={{ __html: svg }}
+                  className="svg-hoja"
+                  style={{ width: `${zoom * 100}%` }}
+                />
+              </div>
+            </>
           ) : (
             <div className="aviso">
               {errores.length ? (

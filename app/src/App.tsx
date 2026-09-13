@@ -155,7 +155,7 @@ function App() {
   return (
     <div className="app">
       <header className="cabecera">
-        <h1>Gantt Viewer</h1>
+        <h1>Gantt Editor</h1>
         <div className={`estado estado-${estados}`}>
           {errores.length
             ? `${errores.length} error(es)`

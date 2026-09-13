@@ -1,5 +1,70 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use serde::Serialize;
+
+#[derive(Serialize)]
+struct ArchivoAbierto {
+    ruta: String,
+    contenido: String,
+}
+
+#[tauri::command]
+async fn abrir_archivo() -> Result<Option<ArchivoAbierto>, String> {
+    let elegido = tauri::async_runtime::spawn_blocking(|| {
+        rfd::FileDialog::new()
+            .add_filter("YAML", &["yaml", "yml"])
+            .add_filter("CSV", &["csv"])
+            .add_filter("Texto", &["txt", "typ"])
+            .add_filter("Todos", &["*"])
+            .pick_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let ruta = match elegido {
+        Some(r) => r,
+        None => return Ok(None),
+    };
+
+    let contenido = std::fs::read_to_string(&ruta)
+        .map_err(|e| format!("no se pudo leer '{}': {e}", ruta.display()))?;
+
+    Ok(Some(ArchivoAbierto {
+        ruta: ruta.to_string_lossy().to_string(),
+        contenido,
+    }))
+}
+
+#[tauri::command]
+async fn guardar_archivo(
+    ruta: Option<String>,
+    contenido: String,
+) -> Result<Option<String>, String> {
+    let ruta = match ruta {
+        Some(r) => PathBuf::from(r),
+        None => {
+            let elegido = tauri::async_runtime::spawn_blocking(|| {
+                rfd::FileDialog::new()
+                    .set_file_name("carta-gantt.yaml")
+                    .add_filter("YAML", &["yaml", "yml"])
+                    .save_file()
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+
+            match elegido {
+                Some(r) => r,
+                None => return Ok(None),
+            }
+        }
+    };
+
+    std::fs::write(&ruta, contenido)
+        .map_err(|e| format!("no se pudo guardar '{}': {e}", ruta.display()))?;
+
+    Ok(Some(ruta.to_string_lossy().to_string()))
+}
 
 #[tauri::command]
 async fn exportar_pdf(
@@ -49,7 +114,11 @@ async fn exportar_pdf(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![exportar_pdf])
+        .invoke_handler(tauri::generate_handler![
+            exportar_pdf,
+            abrir_archivo,
+            guardar_archivo
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

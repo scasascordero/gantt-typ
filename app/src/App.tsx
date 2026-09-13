@@ -12,8 +12,27 @@ import { generarMainTyp, valoresDefault, type Valor } from "./lib/params";
 import MenuParametros from "./MenuParametros";
 import "./App.css";
 
+interface Doc {
+  id: string;
+  nombre: string;
+  ruta?: string;
+  texto: string;
+  sucio: boolean;
+}
+
+function nombreDe(ruta: string): string {
+  return ruta.split(/[\\/]/).pop() || "sin-titulo.yaml";
+}
+
+function docVacio(id: string): Doc {
+  return { id, nombre: "sin-titulo.yaml", texto: "", sucio: false };
+}
+
 function App() {
-  const [texto, setTexto] = useState(ejemploDatos);
+  const [docs, setDocs] = useState<Doc[]>(() => [
+    { id: "doc-1", nombre: "datos.yaml", texto: ejemploDatos, sucio: false },
+  ]);
+  const [idActivo, setIdActivo] = useState("doc-1");
   const [svg, setSvg] = useState<string | null>(null);
   const [errores, setErrores] = useState<string[]>([]);
   const [milis, setMilis] = useState(0);
@@ -25,11 +44,28 @@ function App() {
 
   const mainTyp = useMemo(() => generarMainTyp(parametros), [parametros]);
 
+  const docActual = useMemo(
+    () => docs.find((d) => d.id === idActivo) ?? docs[0],
+    [docs, idActivo],
+  );
+  const texto = docActual.texto;
+
   const editorRef = useRef<EditorView | null>(null);
   const contenedorEditor = useRef<HTMLDivElement | null>(null);
   const svgCaja = useRef<HTMLDivElement | null>(null);
   const textoRef = useRef(texto);
   textoRef.current = texto;
+  const idActivoRef = useRef(idActivo);
+  idActivoRef.current = idActivo;
+
+  const alCambiarTexto = useCallback((t: string) => {
+    const id = idActivoRef.current;
+    setDocs((prev) =>
+      prev.map((d) =>
+        d.id === id ? { ...d, texto: t, sucio: d.texto !== t } : d,
+      ),
+    );
+  }, []);
 
   useEffect(() => {
     if (!contenedorEditor.current) return;
@@ -41,7 +77,7 @@ function App() {
           basicSetup,
           yaml(),
           EditorView.updateListener.of((u) => {
-            if (u.docChanged) setTexto(u.state.doc.toString());
+            if (u.docChanged) alCambiarTexto(u.state.doc.toString());
           }),
         ],
       }),
@@ -148,6 +184,117 @@ function App() {
   );
   const restablecerParametros = useCallback(() => setParametros(valoresDefault()), []);
 
+  const ponerEnEditor = useCallback((textoNuevo: string) => {
+    const v = editorRef.current;
+    if (!v) return;
+    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: textoNuevo } });
+  }, []);
+
+  const seleccionarDoc = useCallback(
+    (id: string) => {
+      const d = docs.find((x) => x.id === id);
+      if (!d) return;
+      idActivoRef.current = id;
+      setIdActivo(id);
+      ponerEnEditor(d.texto);
+    },
+    [docs, ponerEnEditor],
+  );
+
+  const nuevoDoc = useCallback(() => {
+    const id = `doc-${Date.now()}`;
+    idActivoRef.current = id;
+    setDocs((prev) => [...prev, docVacio(id)]);
+    setIdActivo(id);
+    ponerEnEditor("");
+  }, [ponerEnEditor]);
+
+  const abrirArchivo = useCallback(async () => {
+    try {
+      const r = await invoke<{ ruta: string; contenido: string } | null>("abrir_archivo");
+      if (!r) return;
+      const id = `doc-${Date.now()}`;
+      idActivoRef.current = id;
+      setDocs((prev) => [
+        ...prev,
+        { id, nombre: nombreDe(r.ruta), ruta: r.ruta, texto: r.contenido, sucio: false },
+      ]);
+      setIdActivo(id);
+      ponerEnEditor(r.contenido);
+    } catch (err) {
+      setMensaje(`Error al abrir: ${String(err)}`);
+    }
+  }, [ponerEnEditor]);
+
+  const guardarDoc = useCallback(
+    async (como: boolean) => {
+      const d = docActual;
+      if (!d) return;
+      try {
+        const nuevaRuta = await invoke<string | null>("guardar_archivo", {
+          ruta: como ? null : (d.ruta ?? null),
+          contenido: d.texto,
+        });
+        if (!nuevaRuta) return;
+        setDocs((prev) =>
+          prev.map((x) =>
+            x.id === d.id
+              ? { ...x, ruta: nuevaRuta, nombre: nombreDe(nuevaRuta), sucio: false }
+              : x,
+          ),
+        );
+        setMensaje(`Guardado: ${nuevaRuta}`);
+      } catch (err) {
+        setMensaje(`Error al guardar: ${String(err)}`);
+      }
+    },
+    [docActual],
+  );
+
+  const cerrarDoc = useCallback(
+    (id: string) => {
+      const d = docs.find((x) => x.id === id);
+      if (!d) return;
+      if (d.sucio && !window.confirm(`"${d.nombre}" tiene cambios sin guardar. ¿Cerrar igualmente?`)) {
+        return;
+      }
+      const restantes = docs.filter((x) => x.id !== id);
+      const nuevaLista = restantes.length ? restantes : [docVacio(`doc-${Date.now()}`)];
+      setDocs(nuevaLista);
+      if (id !== idActivo) return;
+      const primera = nuevaLista[0];
+      idActivoRef.current = primera.id;
+      setIdActivo(primera.id);
+      ponerEnEditor(primera.texto);
+    },
+    [docs, idActivo, ponerEnEditor],
+  );
+
+  useEffect(() => {
+    const manejar = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const tecla = e.key.toLowerCase();
+      if (tecla === "s") {
+        e.preventDefault();
+        void guardarDoc(false);
+      } else if (tecla === "n") {
+        e.preventDefault();
+        nuevoDoc();
+      } else if (tecla === "o") {
+        e.preventDefault();
+        void abrirArchivo();
+      }
+    };
+    window.addEventListener("keydown", manejar);
+    return () => window.removeEventListener("keydown", manejar);
+  }, [guardarDoc, nuevoDoc, abrirArchivo]);
+
+  const fijarNiveles = useCallback(
+    (nivel: string) => cambiarParametro("mostrar-niveles", nivel),
+    [cambiarParametro],
+  );
+  const nivelActual = String(parametros["mostrar-niveles"] ?? "auto");
+
   const exportarPdf = async () => {
     setExportando(true);
     setMensaje("");
@@ -188,6 +335,39 @@ function App() {
         {mensaje && <span className="mensaje">{mensaje}</span>}
       </header>
 
+      <div className="barra-archivos">
+        <div className="pestanas">
+          {docs.map((d) => (
+            <button
+              key={d.id}
+              className={`pestana${d.id === idActivo ? " activa" : ""}`}
+              onClick={() => seleccionarDoc(d.id)}
+              title={d.ruta ?? d.nombre}
+            >
+              {d.nombre}
+              {d.sucio && <span className="pestana-sucio"> •</span>}
+            </button>
+          ))}
+        </div>
+        <div className="acciones-archivo">
+          <button onClick={nuevoDoc} title="Nuevo documento">
+            Nuevo
+          </button>
+          <button onClick={() => void abrirArchivo()} title="Abrir archivo…">
+            Abrir…
+          </button>
+          <button onClick={() => guardarDoc(false)} title="Guardar (Ctrl+S)">
+            Guardar
+          </button>
+          <button onClick={() => guardarDoc(true)} title="Guardar como…">
+            Guardar como…
+          </button>
+          <button onClick={() => cerrarDoc(idActivo)} title="Cerrar documento">
+            Cerrar
+          </button>
+        </div>
+      </div>
+
       <main className="contenido">
         <section className="panel-editor">
           <div ref={contenedorEditor} className="editor" />
@@ -213,6 +393,17 @@ function App() {
                   Ajustar
                 </button>
                 <span className="zoom-pct">{Math.round(zoom * 100)}%</span>
+                {/** niveles */}
+                <span className="zoom-sep" />
+                <button onClick={() => fijarNiveles("1")} title="Colapsar: mostrar solo el nivel 1">
+                  Colapsar
+                </button>
+                <button onClick={() => fijarNiveles("auto")} title="Expandir: mostrar todos los niveles">
+                  Expandir
+                </button>
+                <span className="zoom-pct">
+                  Niveles: {nivelActual === "auto" ? "todos" : nivelActual}
+                </span>
                 <span className="zoom-ayuda">Ctrl + rueda: zoom · clic: ir a la línea</span>
               </div>
               <div

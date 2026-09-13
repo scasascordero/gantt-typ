@@ -1,0 +1,7 @@
+[package]
+name = "gantt"
+version = "0.1.0"
+entrypoint = "gantt.typ"
+authors = ["Tú"]
+license = "MIT"
+description = "Cartas Gantt en Typst usando solo funciones nativas (sin paquetes externos)."

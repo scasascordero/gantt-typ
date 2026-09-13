@@ -1,0 +1,54 @@
+tareas:
+  - codigo: "1"
+    nombre: Ingeniería
+    inicio: 2026-01-15
+    # inicio/término/avance se heredan automáticamente de las subtareas
+    subtareas:
+      - codigo: "1.1"
+        nombre: Levantamiento de requerimientos
+        inicio: 2026-01-05
+        duracion: 10
+        avance: 1.0
+      - codigo: "1.2"
+        nombre: Diseño de arquitectura
+        inicio: 2026-01-15
+        duracion: 15
+        avance: [0.3, 0.3]
+      - codigo: "1.3"
+        nombre: Revisión y aprobación
+        inicio: 2026-01-30
+        duracion: 14
+        avance: 0.2
+
+  - codigo: "2"
+    nombre: Compras y permisos
+    inicio: 2026-02-01
+    duracion: 45
+    avance: 0.3
+
+  - codigo: "3"
+    nombre: "Hito: permisos aprobados"
+    inicio: 2026-03-18
+
+  - codigo: "4"
+    nombre: Construcción
+    inicio: 2026-03-20
+    termino: 2026-06-30
+    avance: 0.1
+    subtareas:
+      - codigo: "4.1"
+        nombre: Movimiento de tierras
+        inicio: 2026-03-20
+        duracion: 20
+        avance: 0.5
+      - codigo: "4.2"
+        nombre: Obra gruesa
+        inicio: 2026-04-10
+        duracion: 50
+        avance: 0
+
+  - codigo: "5"
+    nombre: Puesta en marcha
+    inicio: 2026-06-25
+    termino: 2026-07-10
+    avance: 0

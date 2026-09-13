@@ -1,0 +1,11 @@
+codigo,nombre,duracion,inicio,termino,avance,padre
+1,Ingeniería,,,,,
+1.1,Levantamiento de requerimientos,10,2026-01-05,,1.0,1
+1.2,Diseño de arquitectura,15,2026-01-15,,0.6,1
+1.3,Revisión y aprobación,14,2026-01-30,,0.2,1
+2,Compras y permisos,45,2026-02-01,,0.3,
+3,Hito: permisos aprobados,,2026-03-18,,,
+4,Construcción,,2026-03-20,2026-06-30,0.1,
+4.1,Movimiento de tierras,20,2026-03-20,,0.5,4
+4.2,Obra gruesa,50,2026-04-10,,0,4
+5,Puesta en marcha,,2026-06-25,2026-07-10,0,

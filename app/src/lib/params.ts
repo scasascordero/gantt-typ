@@ -131,11 +131,11 @@ export const PARAMETROS: ParamDef[] = [
   },
   {
     clave: "mostrar-serie-avance",
-    etiqueta: "Serie de avance en bloques",
-    grupo: "Texto",
+    etiqueta: "Avance por período (arriba/abajo)",
+    grupo: "Avance",
     tipo: "bool",
     defecto: true,
-    ayuda: "false: la serie se dibuja como un solo bloque con el avance total",
+    ayuda: "Dibuja la serie de avance como bloques contiguos en patrón zigzag; false: un solo bloque con el avance total",
   },
   {
     clave: "mostrar-niveles",

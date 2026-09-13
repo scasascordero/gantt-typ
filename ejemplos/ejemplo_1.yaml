@@ -1,0 +1,140 @@
+# Proyecto: construcción de centro de distribución — 31 actividades, 3 niveles
+tareas:
+  - codigo: "1"
+    nombre: Planificación
+    subtareas:
+      - codigo: "1.1"
+        nombre: Estudio de factibilidad
+        inicio: 2026-01-05
+        duracion: 20
+        avance: 1.0
+      - codigo: "1.2"
+        nombre: Diseño conceptual
+        subtareas:
+          - codigo: "1.2.1"
+            nombre: Anteproyecto
+            inicio: 2026-01-25
+            duracion: 25
+            avance: ["50%", "40%"]
+          - codigo: "1.2.2"
+            nombre: Ajustes al anteproyecto
+            inicio: 2026-02-19
+            duracion: 10
+            avance: 0.5
+      - codigo: "1.3"
+        nombre: Diseño de detalle
+        subtareas:
+          - codigo: "1.3.1"
+            nombre: Cálculo estructural
+            inicio: 2026-03-01
+            duracion: 30
+            avance: 100
+          - codigo: "1.3.2"
+            nombre: Instalaciones eléctricas
+            inicio: 2026-03-05
+            duracion: 25
+            avance: 0.8
+          - codigo: "1.3.3"
+            nombre: Instalaciones sanitarias
+            inicio: 2026-03-05
+            duracion: 25
+            avance: 0.7
+          - codigo: "1.3.4"
+            nombre: Revisión y consolidado
+            inicio: 2026-04-01
+            duracion: 10
+            avance: 0.2
+
+  - codigo: "2"
+    nombre: Permisos y compras
+    subtareas:
+      - codigo: "2.1"
+        nombre: Permiso de edificación
+        inicio: 2026-03-15
+        duracion: 45
+        avance: [0.2, 0.25, 0.15]
+      - codigo: "2.2"
+        nombre: Licitación del contratista
+        inicio: 2026-04-05
+        duracion: 30
+        avance: 0.9
+      - codigo: "2.3"
+        nombre: "Hito: contrato firmado"
+        inicio: 2026-05-05
+      - codigo: "2.4"
+        nombre: Equipos de larga entrega
+        inicio: 2026-05-10
+        duracion: 60
+        avance: 0.4
+
+  - codigo: "3"
+    nombre: Construcción
+    subtareas:
+      - codigo: "3.1"
+        nombre: Movimientos de tierra
+        inicio: 2026-05-15
+        duracion: 20
+        avance: 1.0
+      - codigo: "3.2"
+        nombre: Cimentación
+        inicio: 2026-06-04
+        duracion: 30
+        avance: 0.6
+      - codigo: "3.3"
+        nombre: Estructura de hormigón
+        subtareas:
+          - codigo: "3.3.1"
+            nombre: Columnas y zapatas
+            inicio: 2026-07-04
+            duracion: 25
+            avance: 0.5
+          - codigo: "3.3.2"
+            nombre: Losas y vigas
+            inicio: 2026-07-29
+            duracion: 35
+            avance: 0.1
+      - codigo: "3.4"
+        nombre: Cerramientos y cubierta
+        inicio: 2026-09-02
+        duracion: 30
+        avance: 0
+      - codigo: "3.5"
+        nombre: Instalaciones interiores
+        subtareas:
+          - codigo: "3.5.1"
+            nombre: Eléctricas e iluminación
+            inicio: 2026-09-25
+            duracion: 30
+            avance: 0
+          - codigo: "3.5.2"
+            nombre: Sanitarias y contra incendios
+            inicio: 2026-09-25
+            duracion: 30
+            avance: 0
+          - codigo: "3.5.3"
+            nombre: Climatización (HVAC)
+            inicio: 2026-10-05
+            duracion: 35
+            avance: 0
+      - codigo: "3.6"
+        nombre: Terminaciones y pintura
+        inicio: 2026-11-05
+        duracion: 25
+        avance: 0
+
+  - codigo: "4"
+    nombre: Puesta en marcha
+    subtareas:
+      - codigo: "4.1"
+        nombre: Pruebas técnicas y comisionado
+        inicio: 2026-12-01
+        duracion: 15
+        avance: 0
+      - codigo: "4.2"
+        nombre: Capacitación del personal
+        inicio: 2026-12-10
+        duracion: 10
+        avance: 0
+      - codigo: "4.3"
+        nombre: "Hito: recepción final"
+        inicio: 2026-12-20

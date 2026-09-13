@@ -20,7 +20,7 @@ export interface Geometria {
   hoy?: number;
 }
 
-interface Forma {
+export interface Forma {
   x0: number;
   y0: number;
   x1: number;
@@ -28,6 +28,7 @@ interface Forma {
   fill: string | null;
   stroke: string | null;
 }
+
 
 export function analizarSvg(svg: string): Geometria {
   const vb = svg.match(/viewBox="([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)"/);
@@ -47,7 +48,28 @@ export function analizarSvg(svg: string): Geometria {
     .sort((a, b) => a - b);
 
   const unicos = [...new Set(separadores.map((y) => Math.round(y * 100) / 100))];
-  const bandas = construirBandas(unicos);
+
+  // Verdad suprema de las filas: el texto de la columna nombres. Una banda
+  // por cada línea de nombre, centrada en su baseline. Los separadores solo
+  // aportan el paso g (o se deduce de los propios nombres), así que ni el
+  // subrayado del header, ni el marco, ni líneas parásito pueden correr el
+  // mapeo una fila.
+  const bordeNombres = Math.min(
+    ...formas
+      .filter((f) => f.stroke === "e2e8f0" && f.x1 - f.x0 === 0 && f.x0 > 8 && f.y1 - f.y0 >= 20)
+      .map((f) => f.x0),
+    ancho * 0.35,
+  );
+  const nombres = filasNombre(svg, bordeNombres);
+  const g = nombres.length >= 2 ? espaciado(nombres) : espaciado(unicos);
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  let bandas: Banda[] = nombres.map((b) => ({ y0: r2(b - g / 2), y1: r2(b + g / 2) }));
+  if (!bandas.length && unicos.length) {
+    // sin texto de nombres detectable: modelo clásico (separadores = fondos)
+    const ys = [r2(unicos[0] - g), ...unicos];
+    bandas = [];
+    for (let i = 0; i + 1 < ys.length; i++) bandas.push({ y0: ys[i], y1: ys[i + 1] });
+  }
 
   const barras: Rect[] = formas
     .filter((f) => f.fill === "719af2" && f.y1 - f.y0 > 1)
@@ -66,22 +88,61 @@ export function analizarSvg(svg: string): Geometria {
   return { ancho, alto, bandas, barras, hoy };
 }
 
-function construirBandas(separadores: number[]): Banda[] {
-  if (!separadores.length) return [];
-  const g =
-    separadores.length > 1
-      ? Math.round((separadores[1] - separadores[0]) * 100) / 100
-      : 17.01;
-  const y0 = Math.round((separadores[0] - g) * 100) / 100;
-  const ys = [y0, ...separadores];
-  const bandas: Banda[] = [];
-  for (let i = 0; i + 1 < ys.length; i++) {
-    bandas.push({ y0: ys[i], y1: ys[i + 1] });
+export function leerTextos(svg: string): { x: number; y: number }[] {
+  let x = 0;
+  let y = 0;
+  const pila: Array<[number, number]> = [];
+  const out: { x: number; y: number }[] = [];
+  const ev = /<g\b[^>]*>|<\/g>/g;
+  let m: RegExpExecArray | null;
+  while ((m = ev.exec(svg))) {
+    if (m[0] === "</g>") {
+      const t = pila.pop();
+      if (t) {
+        x = t[0];
+        y = t[1];
+      }
+    } else {
+      const tr = m[0].match(/translate\(([-\d.]+),\s*([-\d.]+)\)/);
+      const nx = x + (tr ? Number(tr[1]) : 0);
+      const ny = y + (tr ? Number(tr[2]) : 0);
+      if (/class="typst-text"/.test(m[0])) out.push({ x: nx, y: ny });
+      pila.push([x, y]);
+      x = nx;
+      y = ny;
+    }
   }
-  return bandas;
+  return out;
 }
 
-function leerFormas(svg: string): Forma[] {
+// Un baseline por fila de la columna nombres (texto a la izquierda del
+// borde de la grilla); agrupa glifos de la misma fila con tolerancia de 4pt.
+function filasNombre(svg: string, bordeNombres: number): number[] {
+  const ts = leerTextos(svg).filter((t) => t.x < bordeNombres);
+  const filas: number[] = [];
+  for (const t of ts) {
+    const i = filas.findIndex((y) => Math.abs(y - t.y) <= 4);
+    if (i === -1) filas.push(t.y);
+  }
+  return filas.sort((a, b) => a - b);
+}
+
+function espaciado(ys: number[]): number {
+  const diffs: number[] = [];
+  for (let i = 1; i < ys.length; i++) {
+    const d = Math.round((ys[i] - ys[i - 1]) * 100) / 100;
+    if (d > 2) diffs.push(d);
+  }
+  if (!diffs.length) return 17.01;
+  const cuenta = new Map<number, number>();
+  for (const d of diffs) cuenta.set(d, (cuenta.get(d) ?? 0) + 1);
+  let mejor = diffs[0];
+  let n = 0;
+  for (const [d, c] of cuenta) if (c > n) [mejor, n] = [d, c];
+  return mejor;
+}
+
+export function leerFormas(svg: string): Forma[] {
   let x = 0;
   let y = 0;
   const pila: Array<[number, number]> = [];

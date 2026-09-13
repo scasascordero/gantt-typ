@@ -4,6 +4,7 @@ export interface Tarea {
   id: string;
   nombre: string;
   linea: number;
+  nivel: number;
 }
 
 export function listarTareas(texto: string): Tarea[] {
@@ -13,7 +14,7 @@ export function listarTareas(texto: string): Tarea[] {
     const nodoTareas = doc.get("tareas", true);
     if (!isSeq(nodoTareas)) return [];
     const resultado: Tarea[] = [];
-    const aplanar = (nodo: unknown): void => {
+    const aplanar = (nodo: unknown, nivel: number): void => {
       if (!isMap(nodo)) return;
       const codigo = nodo.get("codigo");
       const nombre = nodo.get("nombre");
@@ -23,12 +24,13 @@ export function listarTareas(texto: string): Tarea[] {
           id: codigo,
           nombre: typeof nombre === "string" ? nombre : String(codigo),
           linea,
+          nivel,
         });
       }
       const sub = nodo.get("subtareas", true);
-      if (isSeq(sub)) for (const item of sub.items) aplanar(item);
+      if (isSeq(sub)) for (const item of sub.items) aplanar(item, nivel + 1);
     };
-    for (const item of nodoTareas.items) aplanar(item);
+    for (const item of nodoTareas.items) aplanar(item, 0);
     return resultado;
   } catch {
     return [];

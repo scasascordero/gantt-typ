@@ -4,7 +4,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { yaml } from "@codemirror/lang-yaml";
 import { invoke } from "@tauri-apps/api/core";
-import ejemploDatos from "../../ejemplos/datos.yaml?raw";
+import ejemploDatos from "../../ejemplos/ejemplo_1.yaml?raw";
 import { compilarSvg, fuentesLibreria } from "./lib/libreria";
 import { analizarSvg } from "./lib/geometria";
 import { listarTareas } from "./lib/yamlLineas";
@@ -30,7 +30,7 @@ function docVacio(id: string): Doc {
 
 function App() {
   const [docs, setDocs] = useState<Doc[]>(() => [
-    { id: "doc-1", nombre: "datos.yaml", texto: ejemploDatos, sucio: false },
+    { id: "doc-1", nombre: "ejemplo_1.yaml", texto: ejemploDatos, sucio: false },
   ]);
   const [idActivo, setIdActivo] = useState("doc-1");
   const [svg, setSvg] = useState<string | null>(null);
@@ -43,6 +43,7 @@ function App() {
   const [menuAbierto, setMenuAbierto] = useState(false);
 
   const mainTyp = useMemo(() => generarMainTyp(parametros), [parametros]);
+  const nivelActual = String(parametros["mostrar-niveles"] ?? "auto");
 
   const docActual = useMemo(
     () => docs.find((d) => d.id === idActivo) ?? docs[0],
@@ -114,7 +115,12 @@ function App() {
     return () => caja.removeEventListener("wheel", alRueda);
   }, [svg]);
 
-  const tareas = useMemo(() => listarTareas(texto), [texto]);
+  const tareas = useMemo(() => {
+    const todas = listarTareas(texto);
+    if (nivelActual === "auto") return todas;
+    const k = Math.max(1, Math.floor(Number(nivelActual)) || 1);
+    return todas.filter((t) => t.nivel < k);
+  }, [texto, nivelActual]);
   const geometria = useMemo(() => (svg ? analizarSvg(svg) : null), [svg]);
 
   const saltarATarea = useCallback(
@@ -293,7 +299,6 @@ function App() {
     (nivel: string) => cambiarParametro("mostrar-niveles", nivel),
     [cambiarParametro],
   );
-  const nivelActual = String(parametros["mostrar-niveles"] ?? "auto");
 
   const exportarPdf = async () => {
     setExportando(true);

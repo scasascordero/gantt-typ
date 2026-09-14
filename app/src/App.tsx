@@ -68,6 +68,7 @@ function App() {
   const [menuProyectosAbierto, setMenuProyectosAbierto] = useState(false);
   const [proyectos, setProyectos] = useState<ProyectoInfo[]>([]);
   const [popupFecha, setPopupFecha] = useState<PopupFecha | null>(null);
+  const [exportMenuAbierto, setExportMenuAbierto] = useState(false);
   const [propsTarea, setPropsTarea] = useState<{ x: number; y: number; codigo: string } | null>(null);
   const inputFecha = useRef<HTMLInputElement | null>(null);
 
@@ -605,6 +606,26 @@ function App() {
     };
   }, [popupFecha]);
 
+  // cierra el menú desplegable de exportación al hacer click o tecla afuera
+  useEffect(() => {
+    if (!exportMenuAbierto) return;
+    const cerrar = (ev: Event) => {
+      if (ev instanceof KeyboardEvent) {
+        if (ev.key === "Escape") setExportMenuAbierto(false);
+        return;
+      }
+      const el = ev.target as Element | null;
+      if (el?.closest?.(".export-menu")) return;
+      setExportMenuAbierto(false);
+    };
+    window.addEventListener("mousedown", cerrar);
+    window.addEventListener("keydown", cerrar);
+    return () => {
+      window.removeEventListener("mousedown", cerrar);
+      window.removeEventListener("keydown", cerrar);
+    };
+  }, [exportMenuAbierto]);
+
   // todas las exportaciones abren "Guardar como" con nombre propuesto
   // AAAA-MM-DD_<documento>.<ext> (editable, para no pisar archivos) y como
   // carpeta inicial la del .yaml fuente si el documento ya está guardado
@@ -768,26 +789,75 @@ function App() {
               ? `ok · ${milis.toFixed(0)} ms · ${tareas.length} tareas`
               : "compilando…"}
         </div>
-        <button onClick={exportarPdf} disabled={exportando || estados !== "ok"}>
-          {exportando ? "Exportando…" : "Exportar PDF"}
-        </button>
-        <button onClick={exportarSvg} disabled={estados !== "ok"} title="Guardar el SVG del preview">
-          Exportar SVG
-        </button>
-        <span className="grupo-export">
-          <button onClick={() => exportarPlan("mspdi")} title="MS Project 2003 XML (.xml)">
-            MSPDI
+        <div className="export-menu">
+          <button
+            className="export-toggle"
+            onClick={() => setExportMenuAbierto((o) => !o)}
+            disabled={exportando || estados !== "ok"}
+            title="Exportar la carta a distintos formatos"
+          >
+            {exportando ? "Exportando…" : "Exportar"}
+            <span className="export-flecha">{exportMenuAbierto ? "▲" : "▼"}</span>
           </button>
-          <button onClick={() => exportarPlan("pmxml")} title="Primavera P6 XML (.xml)">
-            PMXML
-          </button>
-          <button onClick={() => exportarPlan("xer")} title="Primavera P6 XER (.xer)">
-            XER
-          </button>
-          <button onClick={exportarExcel} title="Excel (.xlsx)">
-            Excel
-          </button>
-        </span>
+          {exportMenuAbierto && (
+            <div className="export-lista">
+              <button
+                disabled={exportando}
+                onClick={() => {
+                  setExportMenuAbierto(false);
+                  exportarPdf();
+                }}
+              >
+                PDF
+              </button>
+              <button
+                disabled={estados !== "ok"}
+                onClick={() => {
+                  setExportMenuAbierto(false);
+                  exportarSvg();
+                }}
+              >
+                SVG
+              </button>
+              <button
+                disabled={estados !== "ok"}
+                onClick={() => {
+                  setExportMenuAbierto(false);
+                  exportarPlan("mspdi");
+                }}
+              >
+                MSPDI
+              </button>
+              <button
+                disabled={estados !== "ok"}
+                onClick={() => {
+                  setExportMenuAbierto(false);
+                  exportarPlan("pmxml");
+                }}
+              >
+                PMXML
+              </button>
+              <button
+                disabled={estados !== "ok"}
+                onClick={() => {
+                  setExportMenuAbierto(false);
+                  exportarPlan("xer");
+                }}
+              >
+                XER
+              </button>
+              <button
+                disabled={estados !== "ok"}
+                onClick={() => {
+                  setExportMenuAbierto(false);
+                  exportarExcel();
+                }}
+              >
+                Excel
+              </button>
+            </div>
+          )}
+        </div>
         {mensaje && <span className="mensaje">{mensaje}</span>}
       </header>
 

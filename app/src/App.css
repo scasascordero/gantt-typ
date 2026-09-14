@@ -89,11 +89,47 @@ body,
   background: #2563eb;
 }
 
-.grupo-export {
+.export-menu {
+  position: relative;
   display: inline-flex;
-  gap: 4px;
-  padding-left: 8px;
-  border-left: 1px solid #e2e8f0;
+}
+
+.export-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.export-flecha {
+  font-size: 0.7em;
+  opacity: 0.8;
+}
+
+.export-lista {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 4px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(15 23 42 / 0.18);
+}
+
+.export-lista button {
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+}
+
+.export-lista button:hover:not(:disabled) {
+  background: #eff6ff;
 }
 
 .popup-fecha {

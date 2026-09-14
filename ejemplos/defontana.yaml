@@ -1,0 +1,37 @@
+# Cronograma de cargas mensuales (tabla "Defontana").
+# Fechas volcadas de la planilla dd-mm-aaaa -> formato AAAA-MM-DD.
+config:
+  titulo: "Cronograma de carga mensual"
+  mostrar-columnas: ["inicio", "termino"]
+  color-tarea: "#1d4ed8"
+  nivel-anio: false
+
+tareas:
+  - codigo: "1"
+    nombre: Carga del mes de mayo
+    inicio: 2026-09-10
+    termino: 2026-09-11
+  - codigo: "2"
+    nombre: Carga del mes de junio
+    inicio: 2026-09-14
+    termino: 2026-09-21
+  - codigo: "3"
+    nombre: Revisión de carga y diferencias con EEFF auditados al 30/06/2026
+    inicio: 2026-09-22
+    termino: 2026-09-23
+  - codigo: "4"
+    nombre: Carga del mes de julio
+    inicio: 2026-09-24
+    termino: 2026-09-29
+  - codigo: "5"
+    nombre: Carga del mes de agosto
+    inicio: 2026-09-30
+    termino: 2026-10-06
+  - codigo: "6"
+    nombre: Carga del mes de septiembre
+    inicio: 2026-10-07
+    termino: 2026-10-14
+  - codigo: "7"
+    nombre: Revisión de carga y ajustes
+    inicio: 2026-10-14
+    termino: 2026-10-16

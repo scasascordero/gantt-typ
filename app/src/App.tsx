@@ -789,36 +789,24 @@ function App() {
               ? `ok · ${milis.toFixed(0)} ms · ${tareas.length} tareas`
               : "compilando…"}
         </div>
+        <button onClick={exportarPdf} disabled={exportando || estados !== "ok"}>
+          {exportando ? "Exportando…" : "Exportar PDF"}
+        </button>
+        <button onClick={exportarSvg} disabled={estados !== "ok"} title="Guardar el SVG del preview">
+          Exportar SVG
+        </button>
         <div className="export-menu">
           <button
             className="export-toggle"
             onClick={() => setExportMenuAbierto((o) => !o)}
-            disabled={exportando || estados !== "ok"}
-            title="Exportar la carta a distintos formatos"
+            disabled={estados !== "ok"}
+            title="Exportar el plan a formatos de proyecto"
           >
-            {exportando ? "Exportando…" : "Exportar"}
+            Exportar plan…
             <span className="export-flecha">{exportMenuAbierto ? "▲" : "▼"}</span>
           </button>
           {exportMenuAbierto && (
             <div className="export-lista">
-              <button
-                disabled={exportando}
-                onClick={() => {
-                  setExportMenuAbierto(false);
-                  exportarPdf();
-                }}
-              >
-                PDF
-              </button>
-              <button
-                disabled={estados !== "ok"}
-                onClick={() => {
-                  setExportMenuAbierto(false);
-                  exportarSvg();
-                }}
-              >
-                SVG
-              </button>
               <button
                 disabled={estados !== "ok"}
                 onClick={() => {

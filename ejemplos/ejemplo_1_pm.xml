@@ -1,0 +1,810 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PMML>
+  <Header>
+    <ToolName>gantt-editor</ToolName>
+    <ToolVersion>1.0</ToolVersion>
+    <Lang xmlns="http://www.w3.org/XML/1998/namespace">es</Lang>
+  </Header>
+  <Project>
+    <ProjectID>1</ProjectID>
+    <ProjectUniqueID>1</ProjectUniqueID>
+    <ParentProjectUniqueID>-1</ParentProjectUniqueID>
+    <ShortName>ejemplo_1</ShortName>
+    <ProjectName>ejemplo_1</ProjectName>
+    <WBSCode>1</WBSCode>
+    <ProjectLayoutType>Project</ProjectLayoutType>
+    <StartDate>2026-01-05 00:00</StartDate>
+    <EndDate>2026-12-20 23:59</EndDate>
+    <Task>
+      <TaskID>1</TaskID>
+      <TaskUniqueID>1</TaskUniqueID>
+      <WBSID>1</WBSID>
+      <Name>Planificación</Name>
+      <Type>Task Summary</Type>
+      <Duration>8294400000</Duration>
+      <DurationOriginal>8294400000</DurationOriginal>
+      <Start>2026-01-05 00:00</Start>
+      <Finish>2026-04-10 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>82</PercentComplete>
+      <PhysicalPercentComplete>82</PhysicalPercentComplete>
+      <Critical>0</Critical>
+    </Task>
+    <Task>
+      <TaskID>2</TaskID>
+      <TaskUniqueID>2</TaskUniqueID>
+      <WBSID>2</WBSID>
+      <Name>Estudio de factibilidad</Name>
+      <Type>Task Dependent</Type>
+      <Duration>1728000000</Duration>
+      <DurationOriginal>1728000000</DurationOriginal>
+      <Start>2026-01-05 00:00</Start>
+      <Finish>2026-01-24 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>100</PercentComplete>
+      <PhysicalPercentComplete>100</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>1</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>3</TaskID>
+      <TaskUniqueID>3</TaskUniqueID>
+      <WBSID>3</WBSID>
+      <Name>Diseño conceptual</Name>
+      <Type>Task Summary</Type>
+      <Duration>3024000000</Duration>
+      <DurationOriginal>3024000000</DurationOriginal>
+      <Start>2026-01-25 00:00</Start>
+      <Finish>2026-02-28 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>79</PercentComplete>
+      <PhysicalPercentComplete>79</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>1</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>4</TaskID>
+      <TaskUniqueID>4</TaskUniqueID>
+      <WBSID>4</WBSID>
+      <Name>Anteproyecto</Name>
+      <Type>Task Dependent</Type>
+      <Duration>2160000000</Duration>
+      <DurationOriginal>2160000000</DurationOriginal>
+      <Start>2026-01-25 00:00</Start>
+      <Finish>2026-02-18 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>90</PercentComplete>
+      <PhysicalPercentComplete>90</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>3</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>5</TaskID>
+      <TaskUniqueID>5</TaskUniqueID>
+      <WBSID>5</WBSID>
+      <Name>Ajustes al anteproyecto</Name>
+      <Type>Task Dependent</Type>
+      <Duration>864000000</Duration>
+      <DurationOriginal>864000000</DurationOriginal>
+      <Start>2026-02-19 00:00</Start>
+      <Finish>2026-02-28 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>50</PercentComplete>
+      <PhysicalPercentComplete>50</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>3</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>6</TaskID>
+      <TaskUniqueID>6</TaskUniqueID>
+      <WBSID>6</WBSID>
+      <Name>Diseño de detalle</Name>
+      <Type>Task Summary</Type>
+      <Duration>3542400000</Duration>
+      <DurationOriginal>3542400000</DurationOriginal>
+      <Start>2026-03-01 00:00</Start>
+      <Finish>2026-04-10 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>77</PercentComplete>
+      <PhysicalPercentComplete>77</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>1</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>7</TaskID>
+      <TaskUniqueID>7</TaskUniqueID>
+      <WBSID>7</WBSID>
+      <Name>Cálculo estructural</Name>
+      <Type>Task Dependent</Type>
+      <Duration>2592000000</Duration>
+      <DurationOriginal>2592000000</DurationOriginal>
+      <Start>2026-03-01 00:00</Start>
+      <Finish>2026-03-30 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>100</PercentComplete>
+      <PhysicalPercentComplete>100</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>6</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>8</TaskID>
+      <TaskUniqueID>8</TaskUniqueID>
+      <WBSID>8</WBSID>
+      <Name>Instalaciones eléctricas</Name>
+      <Type>Task Dependent</Type>
+      <Duration>2160000000</Duration>
+      <DurationOriginal>2160000000</DurationOriginal>
+      <Start>2026-03-05 00:00</Start>
+      <Finish>2026-03-29 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>80</PercentComplete>
+      <PhysicalPercentComplete>80</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>6</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>9</TaskID>
+      <TaskUniqueID>9</TaskUniqueID>
+      <WBSID>9</WBSID>
+      <Name>Instalaciones sanitarias</Name>
+      <Type>Task Dependent</Type>
+      <Duration>2160000000</Duration>
+      <DurationOriginal>2160000000</DurationOriginal>
+      <Start>2026-03-05 00:00</Start>
+      <Finish>2026-03-29 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>70</PercentComplete>
+      <PhysicalPercentComplete>70</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>6</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>10</TaskID>
+      <TaskUniqueID>10</TaskUniqueID>
+      <WBSID>10</WBSID>
+      <Name>Revisión y consolidado</Name>
+      <Type>Task Dependent</Type>
+      <Duration>864000000</Duration>
+      <DurationOriginal>864000000</DurationOriginal>
+      <Start>2026-04-01 00:00</Start>
+      <Finish>2026-04-10 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>20</PercentComplete>
+      <PhysicalPercentComplete>20</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>6</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>11</TaskID>
+      <TaskUniqueID>11</TaskUniqueID>
+      <WBSID>11</WBSID>
+      <Name>Permisos y compras</Name>
+      <Type>Task Summary</Type>
+      <Duration>10022400000</Duration>
+      <DurationOriginal>10022400000</DurationOriginal>
+      <Start>2026-03-15 00:00</Start>
+      <Finish>2026-07-08 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>57</PercentComplete>
+      <PhysicalPercentComplete>57</PhysicalPercentComplete>
+      <Critical>0</Critical>
+    </Task>
+    <Task>
+      <TaskID>12</TaskID>
+      <TaskUniqueID>12</TaskUniqueID>
+      <WBSID>12</WBSID>
+      <Name>Permiso de edificación</Name>
+      <Type>Task Dependent</Type>
+      <Duration>3888000000</Duration>
+      <DurationOriginal>3888000000</DurationOriginal>
+      <Start>2026-03-15 00:00</Start>
+      <Finish>2026-04-28 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>60</PercentComplete>
+      <PhysicalPercentComplete>60</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>11</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>13</TaskID>
+      <TaskUniqueID>13</TaskUniqueID>
+      <WBSID>13</WBSID>
+      <Name>Licitación del contratista</Name>
+      <Type>Task Dependent</Type>
+      <Duration>2592000000</Duration>
+      <DurationOriginal>2592000000</DurationOriginal>
+      <Start>2026-04-05 00:00</Start>
+      <Finish>2026-05-04 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>90</PercentComplete>
+      <PhysicalPercentComplete>90</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>11</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>14</TaskID>
+      <TaskUniqueID>14</TaskUniqueID>
+      <WBSID>14</WBSID>
+      <Name>Hito: contrato firmado</Name>
+      <Type>Milestone</Type>
+      <Duration>0</Duration>
+      <DurationOriginal>0</DurationOriginal>
+      <Start>2026-05-05 00:00</Start>
+      <Finish>2026-05-05 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>0</PercentComplete>
+      <PhysicalPercentComplete>0</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>11</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>15</TaskID>
+      <TaskUniqueID>15</TaskUniqueID>
+      <WBSID>15</WBSID>
+      <Name>Equipos de larga entrega</Name>
+      <Type>Task Dependent</Type>
+      <Duration>5184000000</Duration>
+      <DurationOriginal>5184000000</DurationOriginal>
+      <Start>2026-05-10 00:00</Start>
+      <Finish>2026-07-08 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>40</PercentComplete>
+      <PhysicalPercentComplete>40</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>11</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>16</TaskID>
+      <TaskUniqueID>16</TaskUniqueID>
+      <WBSID>16</WBSID>
+      <Name>Construcción</Name>
+      <Type>Task Summary</Type>
+      <Duration>17193600000</Duration>
+      <DurationOriginal>17193600000</DurationOriginal>
+      <Start>2026-05-15 00:00</Start>
+      <Finish>2026-11-29 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>26</PercentComplete>
+      <PhysicalPercentComplete>26</PhysicalPercentComplete>
+      <Critical>0</Critical>
+    </Task>
+    <Task>
+      <TaskID>17</TaskID>
+      <TaskUniqueID>17</TaskUniqueID>
+      <WBSID>17</WBSID>
+      <Name>Movimientos de tierra</Name>
+      <Type>Task Dependent</Type>
+      <Duration>1728000000</Duration>
+      <DurationOriginal>1728000000</DurationOriginal>
+      <Start>2026-05-15 00:00</Start>
+      <Finish>2026-06-03 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>100</PercentComplete>
+      <PhysicalPercentComplete>100</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>16</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>18</TaskID>
+      <TaskUniqueID>18</TaskUniqueID>
+      <WBSID>18</WBSID>
+      <Name>Cimentación</Name>
+      <Type>Task Dependent</Type>
+      <Duration>2592000000</Duration>
+      <DurationOriginal>2592000000</DurationOriginal>
+      <Start>2026-06-04 00:00</Start>
+      <Finish>2026-07-03 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>60</PercentComplete>
+      <PhysicalPercentComplete>60</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>16</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>19</TaskID>
+      <TaskUniqueID>19</TaskUniqueID>
+      <WBSID>19</WBSID>
+      <Name>Estructura de hormigón</Name>
+      <Type>Task Summary</Type>
+      <Duration>5184000000</Duration>
+      <DurationOriginal>5184000000</DurationOriginal>
+      <Start>2026-07-04 00:00</Start>
+      <Finish>2026-09-01 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>27</PercentComplete>
+      <PhysicalPercentComplete>27</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>16</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>20</TaskID>
+      <TaskUniqueID>20</TaskUniqueID>
+      <WBSID>20</WBSID>
+      <Name>Columnas y zapatas</Name>
+      <Type>Task Dependent</Type>
+      <Duration>2160000000</Duration>
+      <DurationOriginal>2160000000</DurationOriginal>
+      <Start>2026-07-04 00:00</Start>
+      <Finish>2026-07-28 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>50</PercentComplete>
+      <PhysicalPercentComplete>50</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>19</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>21</TaskID>
+      <TaskUniqueID>21</TaskUniqueID>
+      <WBSID>21</WBSID>
+      <Name>Losas y vigas</Name>
+      <Type>Task Dependent</Type>
+      <Duration>3024000000</Duration>
+      <DurationOriginal>3024000000</DurationOriginal>
+      <Start>2026-07-29 00:00</Start>
+      <Finish>2026-09-01 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>10</PercentComplete>
+      <PhysicalPercentComplete>10</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>19</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>22</TaskID>
+      <TaskUniqueID>22</TaskUniqueID>
+      <WBSID>22</WBSID>
+      <Name>Cerramientos y cubierta</Name>
+      <Type>Task Dependent</Type>
+      <Duration>2592000000</Duration>
+      <DurationOriginal>2592000000</DurationOriginal>
+      <Start>2026-09-02 00:00</Start>
+      <Finish>2026-10-01 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>0</PercentComplete>
+      <PhysicalPercentComplete>0</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>16</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>23</TaskID>
+      <TaskUniqueID>23</TaskUniqueID>
+      <WBSID>23</WBSID>
+      <Name>Instalaciones interiores</Name>
+      <Type>Task Summary</Type>
+      <Duration>3888000000</Duration>
+      <DurationOriginal>3888000000</DurationOriginal>
+      <Start>2026-09-25 00:00</Start>
+      <Finish>2026-11-08 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>0</PercentComplete>
+      <PhysicalPercentComplete>0</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>16</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>24</TaskID>
+      <TaskUniqueID>24</TaskUniqueID>
+      <WBSID>24</WBSID>
+      <Name>Eléctricas e iluminación</Name>
+      <Type>Task Dependent</Type>
+      <Duration>2592000000</Duration>
+      <DurationOriginal>2592000000</DurationOriginal>
+      <Start>2026-09-25 00:00</Start>
+      <Finish>2026-10-24 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>0</PercentComplete>
+      <PhysicalPercentComplete>0</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>23</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>25</TaskID>
+      <TaskUniqueID>25</TaskUniqueID>
+      <WBSID>25</WBSID>
+      <Name>Sanitarias y contra incendios</Name>
+      <Type>Task Dependent</Type>
+      <Duration>2592000000</Duration>
+      <DurationOriginal>2592000000</DurationOriginal>
+      <Start>2026-09-25 00:00</Start>
+      <Finish>2026-10-24 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>0</PercentComplete>
+      <PhysicalPercentComplete>0</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>23</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>26</TaskID>
+      <TaskUniqueID>26</TaskUniqueID>
+      <WBSID>26</WBSID>
+      <Name>Climatización (HVAC)</Name>
+      <Type>Task Dependent</Type>
+      <Duration>3024000000</Duration>
+      <DurationOriginal>3024000000</DurationOriginal>
+      <Start>2026-10-05 00:00</Start>
+      <Finish>2026-11-08 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>0</PercentComplete>
+      <PhysicalPercentComplete>0</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>23</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>27</TaskID>
+      <TaskUniqueID>27</TaskUniqueID>
+      <WBSID>27</WBSID>
+      <Name>Terminaciones y pintura</Name>
+      <Type>Task Dependent</Type>
+      <Duration>2160000000</Duration>
+      <DurationOriginal>2160000000</DurationOriginal>
+      <Start>2026-11-05 00:00</Start>
+      <Finish>2026-11-29 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>0</PercentComplete>
+      <PhysicalPercentComplete>0</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>16</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>28</TaskID>
+      <TaskUniqueID>28</TaskUniqueID>
+      <WBSID>28</WBSID>
+      <Name>Puesta en marcha</Name>
+      <Type>Task Summary</Type>
+      <Duration>1728000000</Duration>
+      <DurationOriginal>1728000000</DurationOriginal>
+      <Start>2026-12-01 00:00</Start>
+      <Finish>2026-12-20 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>0</PercentComplete>
+      <PhysicalPercentComplete>0</PhysicalPercentComplete>
+      <Critical>0</Critical>
+    </Task>
+    <Task>
+      <TaskID>29</TaskID>
+      <TaskUniqueID>29</TaskUniqueID>
+      <WBSID>29</WBSID>
+      <Name>Pruebas técnicas y comisionado</Name>
+      <Type>Task Dependent</Type>
+      <Duration>1296000000</Duration>
+      <DurationOriginal>1296000000</DurationOriginal>
+      <Start>2026-12-01 00:00</Start>
+      <Finish>2026-12-15 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>0</PercentComplete>
+      <PhysicalPercentComplete>0</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>28</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>30</TaskID>
+      <TaskUniqueID>30</TaskUniqueID>
+      <WBSID>30</WBSID>
+      <Name>Capacitación del personal</Name>
+      <Type>Task Dependent</Type>
+      <Duration>864000000</Duration>
+      <DurationOriginal>864000000</DurationOriginal>
+      <Start>2026-12-10 00:00</Start>
+      <Finish>2026-12-19 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>0</PercentComplete>
+      <PhysicalPercentComplete>0</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>28</ParentTaskID>
+    </Task>
+    <Task>
+      <TaskID>31</TaskID>
+      <TaskUniqueID>31</TaskUniqueID>
+      <WBSID>31</WBSID>
+      <Name>Hito: recepción final</Name>
+      <Type>Milestone</Type>
+      <Duration>0</Duration>
+      <DurationOriginal>0</DurationOriginal>
+      <Start>2026-12-20 00:00</Start>
+      <Finish>2026-12-20 23:59</Finish>
+      <Calendar>2</Calendar>
+      <PercentComplete>0</PercentComplete>
+      <PhysicalPercentComplete>0</PhysicalPercentComplete>
+      <Critical>0</Critical>
+      <ParentTaskID>28</ParentTaskID>
+    </Task>
+    <WBS>
+      <WBSID>1</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>1</Name>
+      <Description>Planificación</Description>
+      <Type>Summary</Type>
+    </WBS>
+    <WBS>
+      <WBSID>2</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>1.1</Name>
+      <Description>Estudio de factibilidad</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>3</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>1.2</Name>
+      <Description>Diseño conceptual</Description>
+      <Type>Summary</Type>
+    </WBS>
+    <WBS>
+      <WBSID>4</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>1.2.1</Name>
+      <Description>Anteproyecto</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>5</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>1.2.2</Name>
+      <Description>Ajustes al anteproyecto</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>6</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>1.3</Name>
+      <Description>Diseño de detalle</Description>
+      <Type>Summary</Type>
+    </WBS>
+    <WBS>
+      <WBSID>7</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>1.3.1</Name>
+      <Description>Cálculo estructural</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>8</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>1.3.2</Name>
+      <Description>Instalaciones eléctricas</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>9</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>1.3.3</Name>
+      <Description>Instalaciones sanitarias</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>10</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>1.3.4</Name>
+      <Description>Revisión y consolidado</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>11</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>2</Name>
+      <Description>Permisos y compras</Description>
+      <Type>Summary</Type>
+    </WBS>
+    <WBS>
+      <WBSID>12</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>2.1</Name>
+      <Description>Permiso de edificación</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>13</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>2.2</Name>
+      <Description>Licitación del contratista</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>14</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>2.3</Name>
+      <Description>Hito: contrato firmado</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>15</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>2.4</Name>
+      <Description>Equipos de larga entrega</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>16</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>3</Name>
+      <Description>Construcción</Description>
+      <Type>Summary</Type>
+    </WBS>
+    <WBS>
+      <WBSID>17</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>3.1</Name>
+      <Description>Movimientos de tierra</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>18</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>3.2</Name>
+      <Description>Cimentación</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>19</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>3.3</Name>
+      <Description>Estructura de hormigón</Description>
+      <Type>Summary</Type>
+    </WBS>
+    <WBS>
+      <WBSID>20</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>3.3.1</Name>
+      <Description>Columnas y zapatas</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>21</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>3.3.2</Name>
+      <Description>Losas y vigas</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>22</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>3.4</Name>
+      <Description>Cerramientos y cubierta</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>23</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>3.5</Name>
+      <Description>Instalaciones interiores</Description>
+      <Type>Summary</Type>
+    </WBS>
+    <WBS>
+      <WBSID>24</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>3.5.1</Name>
+      <Description>Eléctricas e iluminación</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>25</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>3.5.2</Name>
+      <Description>Sanitarias y contra incendios</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>26</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>3.5.3</Name>
+      <Description>Climatización (HVAC)</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>27</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>3.6</Name>
+      <Description>Terminaciones y pintura</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>28</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>4</Name>
+      <Description>Puesta en marcha</Description>
+      <Type>Summary</Type>
+    </WBS>
+    <WBS>
+      <WBSID>29</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>4.1</Name>
+      <Description>Pruebas técnicas y comisionado</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>30</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>4.2</Name>
+      <Description>Capacitación del personal</Description>
+      <Type>Task</Type>
+    </WBS>
+    <WBS>
+      <WBSID>31</WBSID>
+      <ProjectID>1</ProjectID>
+      <ProjectUniqueID>1</ProjectUniqueID>
+      <ParentWBSID>0</ParentWBSID>
+      <Name>4.3</Name>
+      <Description>Hito: recepción final</Description>
+      <Type>Task</Type>
+    </WBS>
+  </Project>
+  <CalendarData>
+    <Calendar>
+      <CalendarID>1</CalendarID>
+      <CalendarName>Standard</CalendarName>
+      <CalendarType>Employee</CalendarType>
+      <HoursPerDay>8</HoursPerDay>
+      <DaysPerWeek>5</DaysPerWeek>
+      <DaysPerMonth>20</DaysPerMonth>
+      <WeekWorkDayFlagList>1111100</WeekWorkDayFlagList>
+    </Calendar>
+    <Calendar>
+      <CalendarID>2</CalendarID>
+      <CalendarName>24 Hour Calendar</CalendarName>
+      <CalendarType>Employee</CalendarType>
+      <HoursPerDay>24</HoursPerDay>
+      <DaysPerWeek>7</DaysPerWeek>
+      <DaysPerMonth>30</DaysPerMonth>
+      <WeekWorkDayFlagList>1111111</WeekWorkDayFlagList>
+    </Calendar>
+  </CalendarData>
+</PMML>

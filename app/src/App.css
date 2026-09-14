@@ -590,3 +590,107 @@ body,
 .menu-acciones button:hover {
   background: #f8fafc;
 }
+
+.menu-proyectos {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.proyectos-vacio {
+  color: #64748b;
+  margin: 6px 0;
+}
+
+.proyecto-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.proyecto-fila.activo {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.proyecto-nombre {
+  font-weight: 500;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proyecto-activo-marca {
+  color: #2563eb;
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.proyecto-acciones {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.proyecto-acciones button {
+  padding: 4px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.proyecto-acciones button:hover {
+  background: #f1f5f9;
+}
+
+.proyecto-acciones .proyecto-borrar {
+  color: #b91c1c;
+}
+
+.proyecto-nuevo {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 4px;
+}
+
+.proyecto-nuevo input {
+  flex: 1;
+  padding: 6px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.proyecto-nuevo button {
+  padding: 6px 14px;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.proyecto-nuevo button:hover {
+  background: #1d4ed1;
+}
+
+.proyecto-nuevo button:disabled {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: default;
+}
+
+.pestana-proyecto {
+  color: #2563eb;
+  margin-right: 4px;
+}

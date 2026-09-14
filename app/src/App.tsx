@@ -13,7 +13,9 @@ import { prepararProyecto, type Fila } from "./lib/proyecto";
 import { aMSPDI, aPMXML, aXER } from "./lib/exportadores";
 import { desdeMSPDI, esMSPDI } from "./lib/mspdi";
 import { editarCampo, leerCampo, leerConfigYaml, type ValorCampo } from "./lib/yamlEdicion";
+import { proyectoAYaml, yamlAProyecto, type ProyectoCompleto } from "./lib/proyectoDb";
 import MenuParametros from "./MenuParametros";
+import MenuProyectos, { type ProyectoInfo } from "./MenuProyectos";
 import PropiedadesTarea from "./PropiedadesTarea";
 import "./App.css";
 
@@ -25,6 +27,7 @@ interface Doc {
   id: string;
   nombre: string;
   ruta?: string;
+  proyectoId?: number;
   texto: string;
   sucio: boolean;
 }
@@ -61,6 +64,8 @@ function App() {
   const contenidoRef = useRef<HTMLElement | null>(null);
   const [parametros, setParametros] = useState<Record<string, Valor>>(() => valoresDefault());
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [menuProyectosAbierto, setMenuProyectosAbierto] = useState(false);
+  const [proyectos, setProyectos] = useState<ProyectoInfo[]>([]);
   const [popupFecha, setPopupFecha] = useState<PopupFecha | null>(null);
   const [propsTarea, setPropsTarea] = useState<{ x: number; y: number; codigo: string } | null>(null);
   const inputFecha = useRef<HTMLInputElement | null>(null);
@@ -90,6 +95,19 @@ function App() {
       ),
     );
   }, []);
+
+  const cargarProyectos = useCallback(async () => {
+    try {
+      const lista = await invoke<ProyectoInfo[]>("listar_proyectos");
+      setProyectos(lista);
+    } catch (err) {
+      setMensaje(`Error al listar proyectos: ${String(err)}`);
+    }
+  }, []);
+
+  useEffect(() => {
+    void cargarProyectos();
+  }, [cargarProyectos]);
 
   useEffect(() => {
     if (!contenedorEditor.current) return;
@@ -353,10 +371,91 @@ function App() {
     }
   }, [ponerEnEditor]);
 
+  // --- CRUD de proyectos (SQLite, sin pasar por archivos) -------------------
+
+  const guardarEnProyecto = useCallback(
+    async (id: number) => {
+      const d = docActual;
+      if (!d) return;
+      try {
+        const p = yamlAProyecto(d.texto);
+        await invoke("guardar_proyecto", {
+          id,
+          tareas: p.tareas,
+          deps: p.deps,
+          params: p.params,
+        });
+        setDocs((prev) =>
+          prev.map((x) => (x.id === d.id ? { ...x, proyectoId: id, sucio: false } : x)),
+        );
+        const nombre = proyectos.find((pr) => pr.id === id)?.nombre ?? `#${id}`;
+        setMensaje(`Guardado en proyecto «${nombre}» (${p.tareas.length} tareas)`);
+      } catch (err) {
+        setMensaje(`Error al guardar en proyecto: ${String(err)}`);
+      }
+    },
+    [docActual, proyectos],
+  );
+
+  const cargarProyecto = useCallback(
+    async (id: number) => {
+      try {
+        const completo = await invoke<ProyectoCompleto>("cargar_proyecto", { id });
+        const p = proyectos.find((pr) => pr.id === id);
+        const nombre = p?.nombre ?? `proyecto-${id}`;
+        const textoNuevo = proyectoAYaml(completo);
+        const did = `doc-${Date.now()}`;
+        idActivoRef.current = did;
+        setDocs((prev) => [...prev, { id: did, nombre: `${nombre}.yaml`, proyectoId: id, texto: textoNuevo, sucio: false }]);
+        setIdActivo(did);
+        ponerEnEditor(textoNuevo);
+        setMensaje(`Abierto «${nombre}»`);
+      } catch (err) {
+        setMensaje(`Error al abrir el proyecto: ${String(err)}`);
+      }
+    },
+    [proyectos, ponerEnEditor],
+  );
+
+  const crearProyectoYGuardar = useCallback(
+    async (nombre: string) => {
+      const n = nombre.trim();
+      if (!n) return;
+      try {
+        const id = await invoke<number>("crear_proyecto", { nombre: n });
+        setProyectos((prev) => [...prev, { id, nombre: n }]);
+        await guardarEnProyecto(id);
+      } catch (err) {
+        setMensaje(`Error al crear el proyecto: ${String(err)}`);
+      }
+    },
+    [guardarEnProyecto],
+  );
+
+  const borrarProyecto = useCallback(
+    async (id: number) => {
+      const nombre = proyectos.find((pr) => pr.id === id)?.nombre ?? `#${id}`;
+      if (!window.confirm(`¿Borrar el proyecto «${nombre}»?`)) return;
+      try {
+        await invoke("borrar_proyecto", { id });
+        setProyectos((prev) => prev.filter((pr) => pr.id !== id));
+        setDocs((prev) => prev.map((x) => (x.proyectoId === id ? { ...x, proyectoId: undefined } : x)));
+        setMensaje(`Proyecto «${nombre}» borrado`);
+      } catch (err) {
+        setMensaje(`Error al borrar el proyecto: ${String(err)}`);
+      }
+    },
+    [proyectos],
+  );
+
   const guardarDoc = useCallback(
     async (como: boolean) => {
       const d = docActual;
       if (!d) return;
+      if (!como && d.proyectoId !== undefined) {
+        await guardarEnProyecto(d.proyectoId);
+        return;
+      }
       try {
         const nuevaRuta = await invoke<string | null>("guardar_archivo", {
           ruta: como ? null : (d.ruta ?? null),
@@ -376,7 +475,7 @@ function App() {
         setMensaje(`Error al guardar: ${String(err)}`);
       }
     },
-    [docActual],
+    [docActual, guardarEnProyecto],
   );
 
   const cerrarDoc = useCallback(
@@ -679,8 +778,9 @@ function App() {
               key={d.id}
               className={`pestana${d.id === idActivo ? " activa" : ""}`}
               onClick={() => seleccionarDoc(d.id)}
-              title={d.ruta ?? d.nombre}
+              title={d.proyectoId !== undefined ? `Proyecto #${d.proyectoId} · ${d.ruta ?? d.nombre}` : (d.ruta ?? d.nombre)}
             >
+              {d.proyectoId !== undefined && <span className="pestana-proyecto">◆</span>}
               {d.nombre}
               {d.sucio && <span className="pestana-sucio"> •</span>}
             </button>
@@ -701,6 +801,9 @@ function App() {
           </button>
           <button onClick={() => guardarDoc(true)} title="Guardar como…">
             Guardar como…
+          </button>
+          <button onClick={() => setMenuProyectosAbierto(true)} title="Proyectos guardados en la biblioteca">
+            Proyectos…
           </button>
           <button onClick={() => cerrarDoc(idActivo)} title="Cerrar documento">
             Cerrar
@@ -790,6 +893,26 @@ function App() {
           onCambiar={cambiarParametro}
           onRestablecer={restablecerParametros}
           onCerrar={cerrarMenu}
+        />
+      )}
+      {menuProyectosAbierto && (
+        <MenuProyectos
+          proyectos={proyectos}
+          proyectoActivo={docActual?.proyectoId ?? null}
+          onAbrir={(id) => {
+            setMenuProyectosAbierto(false);
+            void cargarProyecto(id);
+          }}
+          onGuardarEn={(id) => {
+            void guardarEnProyecto(id);
+          }}
+          onNuevoYGuardar={(nombre) => {
+            void crearProyectoYGuardar(nombre);
+          }}
+          onBorrar={(id) => {
+            void borrarProyecto(id);
+          }}
+          onCerrar={() => setMenuProyectosAbierto(false)}
         />
       )}
       {popupFecha && (

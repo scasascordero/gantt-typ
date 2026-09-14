@@ -64,10 +64,12 @@ export function fechaIso(z: number): string {
 
 type Crudo = unknown;
 
-const esVacio = (v: Crudo): boolean =>
+export const esVacioCrudo = (v: Crudo): boolean =>
   v === null || v === undefined || (typeof v === "string" && v.trim() === "");
 
-function aNumero(v: Crudo, defecto: number | null = null): number | null {
+const esVacio = esVacioCrudo;
+
+export function aNumero(v: Crudo, defecto: number | null = null): number | null {
   if (esVacio(v)) return defecto;
   if (typeof v === "number") return v;
   if (typeof v === "string") {
@@ -79,7 +81,7 @@ function aNumero(v: Crudo, defecto: number | null = null): number | null {
 
 // Acepta Date (el parser YAML convierte 2026-01-05 a Date), "AAAA-MM-DD",
 // "AAAA-MM"/"AAAA" (día/mes 1) o número = día juliano directo.
-function aDias(v: Crudo): number | null {
+export function aDias(v: Crudo): number | null {
   if (esVacio(v)) return null;
   if (typeof v === "number") return Math.trunc(v);
   if (v instanceof Date) return diasDesdeEpoca(v.getUTCFullYear(), v.getUTCMonth() + 1, v.getUTCDate());
@@ -113,7 +115,7 @@ function aAvance(v: Crudo, defecto = 0): number {
   return valor;
 }
 
-function interpretarAvance(v: Crudo): number {
+export function interpretarAvance(v: Crudo): number {
   if (Array.isArray(v)) {
     const serie = v.map((x) => aAvance(x));
     return Math.min(serie.reduce((a, b) => a + b, 0), 1);
@@ -125,7 +127,7 @@ function interpretarAvance(v: Crudo): number {
   return aAvance(v);
 }
 
-function interpretarPredecesoras(v: Crudo): Dep[] {
+export function interpretarPredecesoras(v: Crudo): Dep[] {
   if (esVacio(v)) return [];
   const norm = (dep: Crudo): Dep => {
     if (dep && typeof dep === "object" && !(dep instanceof Date)) {

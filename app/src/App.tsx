@@ -12,7 +12,9 @@ import { generarMainTyp, valoresDefault, type Valor } from "./lib/params";
 import { prepararProyecto } from "./lib/proyecto";
 import { aMSPDI, aPMXML, aXER } from "./lib/exportadores";
 import { desdeMSPDI, esMSPDI } from "./lib/mspdi";
+import { editarCampo, leerCampo, leerConfigYaml, type ValorCampo } from "./lib/yamlEdicion";
 import MenuParametros from "./MenuParametros";
+import PropiedadesTarea from "./PropiedadesTarea";
 import "./App.css";
 
 const ZOOM_MIN = 1; // "Ajustar" (100%) es el piso: el dibujo nunca queda más
@@ -60,6 +62,7 @@ function App() {
   const [parametros, setParametros] = useState<Record<string, Valor>>(() => valoresDefault());
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [popupFecha, setPopupFecha] = useState<PopupFecha | null>(null);
+  const [propsTarea, setPropsTarea] = useState<{ x: number; y: number; codigo: string } | null>(null);
   const inputFecha = useRef<HTMLInputElement | null>(null);
 
   const mainTyp = useMemo(() => generarMainTyp(parametros), [parametros]);
@@ -197,10 +200,22 @@ function App() {
     [indiceDePunto, saltarATarea],
   );
 
-  const abrirMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setMenuAbierto(true);
+  const ponerEnEditor = useCallback((textoNuevo: string) => {
+    const v = editorRef.current;
+    if (!v) return;
+    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: textoNuevo } });
   }, []);
+
+  const alClicDerechoCarta = useCallback(
+    (e: React.MouseEvent) => {
+      const i = indiceDePunto(e);
+      if (i >= 0 && tareas[i]) {
+        e.preventDefault();
+        setPropsTarea({ x: e.clientX, y: e.clientY, codigo: tareas[i].id });
+      }
+    },
+    [indiceDePunto, tareas],
+  );
 
   const cerrarMenu = useCallback(() => setMenuAbierto(false), []);
   const cambiarParametro = useCallback(
@@ -208,13 +223,71 @@ function App() {
       setParametros((prev) => ({ ...prev, [clave]: valor })),
     [],
   );
-  const restablecerParametros = useCallback(() => setParametros(valoresDefault()), []);
+  const restablecerParametros = useCallback(
+    () => setParametros({ ...valoresDefault(), ...leerConfigYaml(textoRef.current) }),
+    [],
+  );
 
-  const ponerEnEditor = useCallback((textoNuevo: string) => {
-    const v = editorRef.current;
-    if (!v) return;
-    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: textoNuevo } });
-  }, []);
+  // la sección `config:` del YAML reemplaza los valores de base del menú;
+  // lo que el usuario cambió a mano por encima se conserva
+  const configJson = useMemo(() => JSON.stringify(leerConfigYaml(texto)), [texto]);
+  const baseConfigRef = useRef<string>("{}");
+  useEffect(() => {
+    setParametros((prev) => {
+      const base: Record<string, Valor> = { ...valoresDefault(), ...JSON.parse(configJson) };
+      const baseAnterior: Record<string, Valor> = { ...valoresDefault(), ...JSON.parse(baseConfigRef.current) };
+      const ajustes: Record<string, Valor> = {};
+      for (const k of Object.keys(prev)) {
+        if (JSON.stringify(prev[k]) !== JSON.stringify(baseAnterior[k])) ajustes[k] = prev[k];
+      }
+      return { ...base, ...ajustes };
+    });
+    baseConfigRef.current = configJson;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configJson]);
+
+  const CAMPOS_TAREA = [
+    "nombre", "inicio", "termino", "duracion", "avance", "formato-barra",
+    "negrita", "italica", "color-texto", "ocultar-subtareas",
+    "cantidad", "unidad", "costo-unitario", "costo",
+  ];
+  const camposTarea = useMemo(() => {
+    if (!propsTarea) return null;
+    const c: Record<string, ValorCampo> = {};
+    for (const k of CAMPOS_TAREA) {
+      try {
+        c[k] = leerCampo(texto, propsTarea.codigo, k);
+      } catch {
+        c[k] = null;
+      }
+    }
+    return c;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propsTarea, texto]);
+
+  const aplicarCampoTarea = useCallback(
+    (clave: string, valor: ValorCampo) => {
+      if (!propsTarea) return;
+      try {
+        ponerEnEditor(editarCampo(textoRef.current, propsTarea.codigo, clave, valor));
+      } catch (err) {
+        setMensaje(`Error al editar: ${String(err)}`);
+      }
+    },
+    [propsTarea, ponerEnEditor],
+  );
+
+  useEffect(() => setPropsTarea(null), [idActivo]);
+  useEffect(() => {
+    if (!propsTarea) return;
+    const afuera = (ev: PointerEvent) => {
+      const el = ev.target as Element | null;
+      if (el?.closest?.(".panel-propiedades")) return;
+      setPropsTarea(null);
+    };
+    window.addEventListener("pointerdown", afuera);
+    return () => window.removeEventListener("pointerdown", afuera);
+  }, [propsTarea]);
 
   const seleccionarDoc = useCallback(
     (id: string) => {
@@ -529,6 +602,9 @@ function App() {
     <div className="app">
       <header className="cabecera">
         <h1>Gantt Editor</h1>
+        <button onClick={() => setMenuAbierto(true)} title="Editar los parámetros de carta-gantt">
+          Configurar
+        </button>
         <div className={`estado estado-${estados}`}>
           {errores.length
             ? `${errores.length} error(es)`
@@ -642,13 +718,13 @@ function App() {
                 <span className="zoom-pct">
                   Niveles: {nivelActual === "auto" ? "todos" : nivelActual}
                 </span>
-                <span className="zoom-ayuda">Ctrl + rueda: zoom · clic: ir a la línea</span>
+                <span className="zoom-ayuda">Ctrl + rueda: zoom · clic: ir a la línea · clic derecho: propiedades</span>
               </div>
               <div
                 ref={svgCaja}
                 className="svg-contenedor"
                 onClick={alClicSvg}
-                onContextMenu={abrirMenu}
+                onContextMenu={alClicDerechoCarta}
               >
                 <div
                   dangerouslySetInnerHTML={{ __html: svg }}
@@ -689,6 +765,17 @@ function App() {
           />
           <span className="popup-fecha-ayuda">Enter aplica · Esc cierra</span>
         </div>
+      )}
+      {propsTarea && camposTarea && (
+        <PropiedadesTarea
+          x={propsTarea.x}
+          y={propsTarea.y}
+          codigo={propsTarea.codigo}
+          nombre={String(camposTarea.nombre ?? propsTarea.codigo)}
+          campos={camposTarea}
+          onAplicar={aplicarCampoTarea}
+          onCerrar={() => setPropsTarea(null)}
+        />
       )}
     </div>
   );

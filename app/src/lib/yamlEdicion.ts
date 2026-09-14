@@ -1,0 +1,184 @@
+// yamlEdicion.ts — Lectura y edición quirúrgica de campos de una actividad
+// en el YAML, usando los rangos del parser (`yaml`) para reescribir solo la
+// línea del campo: conserva comentarios, orden y estilo del resto del archivo.
+
+import { parseDocument, isMap, isSeq, isPair, isScalar, type Document, type Node, type Pair, type YAMLMap, type YAMLSeq } from "yaml";
+
+export type ValorCampo = string | number | boolean | null;
+
+// encuentra el mapa de la tarea con `codigo`, recorriendo en el mismo order
+// de aplanado que la librería (codigo propio y luego subtareas)
+function hallarNodo(doc: Document, codigo: string): YAMLMap | null {
+  const raiz = doc.get("tareas", true);
+  if (!isSeq(raiz)) return null;
+  const buscar = (seq: YAMLSeq): YAMLMap | null => {
+    for (const item of seq.items) {
+      if (!isMap(item)) continue;
+      if (String(item.get("codigo", true) ?? "") === codigo) return item;
+      const sub = item.get("subtareas", true);
+      if (isSeq(sub)) {
+        const r = buscar(sub);
+        if (r) return r;
+      }
+    }
+    return null;
+  };
+  return buscar(raiz);
+}
+
+function serializar(v: ValorCampo): string {
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  const s = String(v);
+  // fechas AAAA-MM-DD y palabras simples van sin comillas; el resto, citadas
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s) || /^[A-Za-z][A-Za-z0-9_-]*$/.test(s)) return s;
+  return JSON.stringify(s);
+}
+
+export function leerCampo(texto: string, codigo: string, clave: string): ValorCampo {
+  const doc = parseDocument(texto);
+  const nodo = hallarNodo(doc, codigo);
+  if (!nodo) return null;
+  for (const pair of nodo.items) {
+    if (isPair(pair) && String(pair.key) === clave) {
+      const v = isScalar(pair.value) ? pair.value.value : pair.value;
+      if (v instanceof Date) return v.toISOString().slice(0, 10);
+      if (v === null || v === undefined) return null;
+      if (typeof v === "number" || typeof v === "boolean" || typeof v === "string") return v;
+      return String(v);
+    }
+  }
+  return null;
+}
+
+const esVacio = (v: ValorCampo) => v === null || v === "" || (typeof v === "number" && Number.isNaN(v));
+
+// rango [inicio, fin] del par `clave: valor` en el texto fuente, a partir de
+// los rangos de los nodos key/value (Pair no expone range directamente)
+function rangoPar(pair: Pair): [number, number] | null {
+  const k = pair.key as Node | null;
+  const v = pair.value as Node | null;
+  if (!k || !k.range) return null;
+  const start = k.range[0];
+  const end = v && v.range ? v.range[1] : k.range[1];
+  return [start, end];
+}
+
+export function editarCampo(texto: string, codigo: string, clave: string, valor: ValorCampo): string {
+  const doc = parseDocument(texto);
+  const nodo = hallarNodo(doc, codigo);
+  if (!nodo) throw new Error(`no se encontró la tarea ${codigo}`);
+
+  let objetivo: Pair | null = null;
+  for (const pair of nodo.items) if (isPair(pair) && String(pair.key) === clave) objetivo = pair;
+
+  // borrar: quitar la línea completa del par
+  if (objetivo && esVacio(valor)) {
+    const r = rangoPar(objetivo);
+    if (!r) throw new Error(`no se pudo ubicar '${clave}' en ${codigo}`);
+    const lineStart = texto.lastIndexOf("\n", r[0] - 1) + 1;
+    let lineEnd = texto.indexOf("\n", r[1]);
+    if (lineEnd === -1) lineEnd = texto.length;
+    return texto.slice(0, lineStart) + texto.slice(Math.min(texto.length, lineEnd + 1));
+  }
+
+  // actualizar en el lugar
+  if (objetivo) {
+    const r = rangoPar(objetivo);
+    if (!r) throw new Error(`no se pudo ubicar '${clave}' en ${codigo}`);
+    return texto.slice(0, r[0]) + `${clave}: ${serializar(valor)}` + texto.slice(r[1]);
+  }
+
+  // insertar: después de la línea de un campo escalar propio (prefiere
+  // `codigo`); si la tarea solo tiene `subtareas`, antes de esa clave
+  const pares = nodo.items.filter(isPair) as Pair[];
+  const ancla = pares.find((p) => String(p.key) === "codigo") ?? pares.find((p) => String(p.key) !== "subtareas");
+  // en una secuencia, la clave del primer campo viene precedida por "- ":
+  // la línea nueva debe sangrarse como las demás claves (sin el guión)
+  const sangria = (s: string) => (s.endsWith("- ") ? s.slice(0, -2) + "  " : s);
+  if (!ancla) {
+    const sub = pares.find((p) => String(p.key) === "subtareas");
+    if (!sub) throw new Error(`tarea ${codigo} sin pares ubicables`);
+    const rk = (sub.key as Node).range![0];
+    const lineStart = texto.lastIndexOf("\n", rk - 1) + 1;
+    const indent = sangria(texto.slice(lineStart, rk));
+    return texto.slice(0, lineStart) + `${indent}${clave}: ${serializar(valor)}\n` + texto.slice(lineStart);
+  }
+  const rAncla = rangoPar(ancla);
+  if (!rAncla) throw new Error(`ancla sin rango en ${codigo}`);
+  let lineEnd = texto.indexOf("\n", rAncla[1]);
+  if (lineEnd === -1) lineEnd = texto.length;
+  const kStart = (ancla.key as Node).range![0];
+  const kLineStart = texto.lastIndexOf("\n", kStart - 1) + 1;
+  const indent = sangria(texto.slice(kLineStart, kStart));
+  return texto.slice(0, lineEnd) + `\n${indent}${clave}: ${serializar(valor)}` + texto.slice(lineEnd);
+}
+
+// --- sección `config:` del YAML -> valores para el menú de parámetros ------
+
+import { PARAMETROS, type Valor } from "./params.ts";
+
+const TIPOS: Record<string, string> = {};
+for (const p of PARAMETROS) TIPOS[p.clave] = p.tipo;
+
+export function leerConfigYaml(texto: string): Record<string, Valor> {
+  const salida: Record<string, Valor> = {};
+  try {
+    const doc = parseDocument(texto);
+    const cfg = doc.get("config", true);
+    if (!isMap(cfg)) return salida;
+    for (const pair of cfg.items) {
+      if (!isPair(pair) || pair.value == null) continue;
+      const clave = String(pair.key);
+      const tipo = TIPOS[clave];
+      if (!tipo) continue;
+      let v: unknown;
+      if (isScalar(pair.value)) v = pair.value.value;
+      else if (isSeq(pair.value)) v = pair.value.items.map((x) => (isScalar(x) ? String(x.value) : null));
+      else v = undefined;
+      if (v instanceof Date) v = v.toISOString().slice(0, 10);
+      switch (tipo) {
+        case "color":
+          if (typeof v === "string") salida[clave] = v.trim().replace(/^#/, "").toLowerCase();
+          break;
+        case "bool":
+          if (typeof v === "boolean") salida[clave] = v;
+          break;
+        case "numero":
+          if (typeof v === "number") salida[clave] = v;
+          else if (typeof v === "string") {
+            const n = parseFloat(v.replace(/(cm|pt|mm)$/i, ""));
+            if (Number.isFinite(n)) salida[clave] = n;
+          }
+          break;
+        case "triestado":
+        case "auto-entero":
+          if (v === "auto" || typeof v === "number") salida[clave] = String(v);
+          break;
+        case "opciones":
+        case "texto":
+        case "fecha":
+          if (typeof v === "string") salida[clave] = v;
+          break;
+        case "auto-longitud":
+          if (v === "auto") salida[clave] = "auto";
+          else {
+            const n = typeof v === "number" ? v : parseFloat(String(v).replace(/(cm|pt|mm)$/i, ""));
+            if (Number.isFinite(n)) salida[clave] = n;
+          }
+          break;
+        case "columnas":
+          if (
+            Array.isArray(v) &&
+            (v as unknown[]).every((x) =>
+              ["duracion", "inicio", "termino", "avance", "cantidad", "unidad", "costo-unitario", "costo", "holgura", "critico", "inicio-temprano", "termino-temprano", "inicio-tardio", "termino-tardio"].includes(String(x)),
+            )
+          )
+            salida[clave] = (v as unknown[]).map((x) => String(x));
+          break;
+      }
+    }
+  } catch {
+    /* YAML inválido: sin config */
+  }
+  return salida;
+}

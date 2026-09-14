@@ -27,6 +27,9 @@ export function listarTareas(texto: string): Tarea[] {
           nivel,
         });
       }
+      // con `ocultar-subtareas: true` la librería no dibuja el subárbol:
+      // hay que saltarlo también acá para que el clic siga filando justo
+      if (nodo.get("ocultar-subtareas") === true) return;
       const sub = nodo.get("subtareas", true);
       if (isSeq(sub)) for (const item of sub.items) aplanar(item, nivel + 1);
     };

@@ -479,7 +479,10 @@ function App() {
     const destino = await elegirDestino("svg");
     if (!destino) return;
     try {
-      await invoke<string | null>("guardar_archivo", { ruta: destino, contenido: svg });
+      // el renderer incrusta un <script> con JS que trae "&&" sin escapar:
+      // inválido como XML y además inútil en un .svg guardado
+      const svgLimpio = svg.replace(/<script[\s\S]*?<\/script>/g, "");
+      await invoke<string | null>("guardar_archivo", { ruta: destino, contenido: svgLimpio });
       setMensaje(`SVG exportado: ${destino}`);
     } catch (err) {
       setMensaje(`Error: ${String(err)}`);

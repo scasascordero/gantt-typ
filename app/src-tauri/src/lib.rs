@@ -3,10 +3,36 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 
+use dominio::modelo::{Fila, OpcionesCpm};
+use dominio::preparar::preparar_proyecto;
+
 #[derive(Serialize)]
 struct ArchivoAbierto {
     ruta: String,
     contenido: String,
+}
+
+// Motor en Rust: calcula la lista de filas (misma API que proyecto.ts).
+// Se invoca en un hilo para no bloquear la UI con YAML/CPM grandes.
+#[tauri::command]
+async fn preparar_filas(
+    texto: String,
+    cpm: bool,
+    inicio_proyecto: Option<String>,
+    termino_proyecto: Option<String>,
+) -> Result<Vec<Fila>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        preparar_proyecto(
+            &texto,
+            &OpcionesCpm {
+                cpm,
+                inicio_proyecto,
+                termino_proyecto,
+            },
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -161,7 +187,8 @@ pub fn run() {
             exportar_pdf,
             elegir_destino,
             abrir_archivo,
-            guardar_archivo
+            guardar_archivo,
+            preparar_filas
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -9,7 +9,7 @@ import { compilarSvg, fuentesLibreria } from "./lib/libreria";
 import { analizarSvg } from "./lib/geometria";
 import { listarTareas } from "./lib/yamlLineas";
 import { generarMainTyp, valoresDefault, type Valor } from "./lib/params";
-import { prepararProyecto } from "./lib/proyecto";
+import { prepararProyecto, type Fila } from "./lib/proyecto";
 import { aMSPDI, aPMXML, aXER } from "./lib/exportadores";
 import { desdeMSPDI, esMSPDI } from "./lib/mspdi";
 import { editarCampo, leerCampo, leerConfigYaml, type ValorCampo } from "./lib/yamlEdicion";
@@ -568,11 +568,23 @@ function App() {
         const v = parametros[k];
         return typeof v === "string" && v.trim() !== "" ? v : undefined;
       };
-      const filas = prepararProyecto(texto, {
-        cpm: parametros["cpm"] === true,
-        inicioProyecto: fechaOpt("inicio-proyecto"),
-        terminoProyecto: fechaOpt("termino-proyecto"),
-      });
+      // Motor en Rust (dominio), misma API Fila[] que proyecto.ts
+      let filas: Fila[];
+      try {
+        filas = await invoke<Fila[]>("preparar_filas", {
+          texto: textoRef.current,
+          cpm: parametros["cpm"] === true,
+          inicioProyecto: fechaOpt("inicio-proyecto"),
+          terminoProyecto: fechaOpt("termino-proyecto"),
+        });
+      } catch (err) {
+        setMensaje(`Motor Rust no disponible, usando TS: ${String(err)}`);
+        filas = prepararProyecto(textoRef.current, {
+          cpm: parametros["cpm"] === true,
+          inicioProyecto: fechaOpt("inicio-proyecto"),
+          terminoProyecto: fechaOpt("termino-proyecto"),
+        });
+      }
       if (!filas.length) {
         setMensaje("nada que exportar: no se reconocieron tareas en el YAML");
         return;

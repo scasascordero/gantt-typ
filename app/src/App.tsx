@@ -432,14 +432,39 @@ function App() {
     };
   }, [popupFecha]);
 
+  // todas las exportaciones abren "Guardar como" con nombre propuesto
+  // AAAA-MM-DD_<documento>.<ext> (editable, para no pisar archivos) y como
+  // carpeta inicial la del .yaml fuente si el documento ya está guardado
+  const elegirDestino = async (ext: string): Promise<string | null> => {
+    const base = docActual.nombre.replace(/\.[^.]+$/, "") || "carta-gantt";
+    const r = docActual.ruta ?? "";
+    const i = Math.max(r.lastIndexOf("\\"), r.lastIndexOf("/"));
+    const dir = i > 0 ? r.slice(0, i) : null;
+    const dt = new Date();
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    const fecha = `${dt.getFullYear()}-${p2(dt.getMonth() + 1)}-${p2(dt.getDate())}`;
+    try {
+      return await invoke<string | null>("elegir_destino", {
+        nombre: `${fecha}_${base}.${ext}`,
+        carpeta: dir,
+      });
+    } catch (err) {
+      setMensaje(`Error: ${String(err)}`);
+      return null;
+    }
+  };
+
   const exportarPdf = async () => {
     setExportando(true);
     setMensaje("");
     try {
+      const destino = await elegirDestino("pdf");
+      if (!destino) return;
       const ruta = await invoke<string>("exportar_pdf", {
         yaml: textoRef.current,
         plantilla: generarMainTyp(parametros),
         fuentes: fuentesLibreria(),
+        destino,
       });
       setMensaje(`PDF exportado: ${ruta}`);
     } catch (err) {
@@ -451,14 +476,11 @@ function App() {
 
   const exportarSvg = async () => {
     if (!svg) return;
-    const base = docActual.nombre.replace(/\.[^.]+$/, "") || "carta-gantt";
+    const destino = await elegirDestino("svg");
+    if (!destino) return;
     try {
-      const ruta = await invoke<string | null>("guardar_archivo", {
-        ruta: null,
-        contenido: svg,
-        nombre: `${base}.svg`,
-      });
-      if (ruta) setMensaje(`SVG exportado: ${ruta}`);
+      await invoke<string | null>("guardar_archivo", { ruta: destino, contenido: svg });
+      setMensaje(`SVG exportado: ${destino}`);
     } catch (err) {
       setMensaje(`Error: ${String(err)}`);
     }
@@ -479,16 +501,16 @@ function App() {
         setMensaje("nada que exportar: no se reconocieron tareas en el YAML");
         return;
       }
-      const nombre = docActual.nombre.replace(/\.[^.]+$/, "") || "carta-gantt";
-      const p = { nombre, filas };
-      const contenido = formato === "mspdi" ? aMSPDI(p) : formato === "pmxml" ? aPMXML(p) : aXER(p);
       const ext = formato === "xer" ? "xer" : "xml";
-      const ruta = await invoke<string | null>("guardar_archivo", {
-        ruta: null,
-        contenido,
-        nombre: `${nombre}.${ext}`,
-      });
-      if (ruta) setMensaje(`Exportado ${formato.toUpperCase()}: ${ruta}`);
+      const destino = await elegirDestino(ext);
+      if (!destino) return;
+      const p = { nombre: docActual.nombre.replace(/\.[^.]+$/, "") || "carta-gantt", filas };
+      const contenido =
+        formato === "mspdi" ? aMSPDI(p)
+        : formato === "pmxml" ? aPMXML(p)
+        : aXER(p);
+      await invoke<string | null>("guardar_archivo", { ruta: destino, contenido });
+      setMensaje(`Exportado ${formato.toUpperCase()}: ${destino}`);
     } catch (err) {
       setMensaje(`Error al exportar: ${String(err)}`);
     }

@@ -71,11 +71,38 @@ async fn guardar_archivo(
     Ok(Some(ruta.to_string_lossy().to_string()))
 }
 
+// Muestra el diálogo "Guardar como" sin escribir nada: devuelve la ruta
+// elegida (el nombre propuesto puede editarse para no pisar archivos).
+#[tauri::command]
+async fn elegir_destino(
+    nombre: Option<String>,
+    carpeta: Option<String>,
+) -> Result<Option<String>, String> {
+    let elegido = tauri::async_runtime::spawn_blocking(move || {
+        let mut dialogo = rfd::FileDialog::new();
+        if let Some(n) = nombre {
+            dialogo = dialogo.set_file_name(n);
+        }
+        if let Some(c) = carpeta {
+            dialogo = dialogo.set_directory(c);
+        }
+        dialogo
+            .add_filter("Documentos", &["pdf", "svg", "xml", "xer"])
+            .add_filter("Todos", &["*"])
+            .save_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(elegido.map(|r| r.to_string_lossy().to_string()))
+}
+
 #[tauri::command]
 async fn exportar_pdf(
     plantilla: String,
     yaml: String,
     fuentes: HashMap<String, String>,
+    destino: Option<String>,
 ) -> Result<String, String> {
     let milis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -106,7 +133,18 @@ async fn exportar_pdf(
         return Err(format!("typst falló:\n{stdout}{stderr}"));
     }
 
-    let ruta = salida.to_string_lossy().to_string();
+    let ruta = match destino {
+        Some(d) => {
+            let destino_path = PathBuf::from(&d);
+            if let Some(padre) = destino_path.parent() {
+                let _ = std::fs::create_dir_all(padre);
+            }
+            std::fs::copy(&salida, &destino_path)
+                .map_err(|e| format!("no se pudo copiar a '{}': {e}", destino_path.display()))?;
+            destino_path.to_string_lossy().to_string()
+        }
+        None => salida.to_string_lossy().to_string(),
+    };
     std::process::Command::new("cmd")
         .args(["/C", "start", "", &ruta])
         .spawn()
@@ -121,6 +159,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             exportar_pdf,
+            elegir_destino,
             abrir_archivo,
             guardar_archivo
         ])

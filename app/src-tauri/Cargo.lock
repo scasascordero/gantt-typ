@@ -65,8 +65,10 @@ version = "0.1.0"
 dependencies = [
  "dominio",
  "rfd",
+ "rusqlite",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",

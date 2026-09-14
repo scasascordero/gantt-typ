@@ -116,7 +116,7 @@ pub fn listar_proyectos(conn: &Connection) -> Result<Vec<(i64, String)>, String>
     Ok(out)
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TareaDb {
     pub codigo: String,
@@ -263,17 +263,13 @@ pub fn insertar_dependencia(
 pub fn reemplazar_dependencias(
     conn: &mut Connection,
     proyecto_id: i64,
-    deps: &[super::modelo::Dep],
+    deps: &[(String, super::modelo::Dep)],
 ) -> Result<(), String> {
     conn.execute("DELETE FROM dependencias WHERE proyecto_id = ?1", [proyecto_id])
         .map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    for d in deps {
-        insertar_dependencia(&tx, proyecto_id, &d.pred, &super::modelo::Dep {
-            pred: d.pred.clone(),
-            tipo: super::modelo::TipoDep::Fs,
-            lag: d.lag,
-        })?;
+    for (tarea_codigo, dep) in deps {
+        insertar_dependencia(&tx, proyecto_id, tarea_codigo, dep)?;
     }
     tx.commit().map_err(|e| e.to_string())?;
     Ok(())

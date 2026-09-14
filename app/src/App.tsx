@@ -527,14 +527,34 @@ function App() {
     }
   };
 
+  // fecha de un parámetro (inicio-proyecto | termino-proyecto), sin vacíos
+  const fechaOpt = (k: string) => {
+    const v = parametros[k];
+    return typeof v === "string" && v.trim() !== "" ? v : undefined;
+  };
+
   const exportarPdf = async () => {
     setExportando(true);
     setMensaje("");
     try {
       const destino = await elegirDestino("pdf");
       if (!destino) return;
+      // Fechas y costos resueltos por el motor Rust (inyeccion => YAML que
+      // gantt.typ consume sin recalcular): mismo contrato de preparar-tareas.
+      let yaml = textoRef.current;
+      try {
+        yaml = await invoke<string>("filas_a_yaml", {
+          texto: textoRef.current,
+          cpm: parametros["cpm"] === true,
+          inicioProyecto: fechaOpt("inicio-proyecto"),
+          terminoProyecto: fechaOpt("termino-proyecto"),
+        });
+      } catch (err) {
+        setMensaje(`Inyección Rust no disponible, usando YAML crudo: ${String(err)}`);
+        yaml = textoRef.current;
+      }
       const ruta = await invoke<string>("exportar_pdf", {
-        yaml: textoRef.current,
+        yaml,
         plantilla: generarMainTyp(parametros),
         fuentes: fuentesLibreria(),
         destino,
@@ -564,10 +584,6 @@ function App() {
 
   const exportarPlan = async (formato: "mspdi" | "pmxml" | "xer") => {
     try {
-      const fechaOpt = (k: string) => {
-        const v = parametros[k];
-        return typeof v === "string" && v.trim() !== "" ? v : undefined;
-      };
       // Motor en Rust (dominio), misma API Fila[] que proyecto.ts
       let filas: Fila[];
       try {
@@ -592,11 +608,23 @@ function App() {
       const ext = formato === "xer" ? "xer" : "xml";
       const destino = await elegirDestino(ext);
       if (!destino) return;
-      const p = { nombre: docActual.nombre.replace(/\.[^.]+$/, "") || "carta-gantt", filas };
-      const contenido =
-        formato === "mspdi" ? aMSPDI(p)
-        : formato === "pmxml" ? aPMXML(p)
-        : aXER(p);
+      // Serialización en Rust (exportar.rs, mismo contrato que exportadores.ts)
+      let contenido: string;
+      try {
+        contenido = await invoke<string>("exportar_plan", {
+          texto: textoRef.current,
+          formato,
+          inicioProyecto: fechaOpt("inicio-proyecto"),
+          terminoProyecto: fechaOpt("termino-proyecto"),
+        });
+      } catch (err) {
+        setMensaje(`Exportador Rust no disponible, usando TS: ${String(err)}`);
+        const p = { nombre: docActual.nombre.replace(/\.[^.]+$/, "") || "carta-gantt", filas };
+        contenido =
+          formato === "mspdi" ? aMSPDI(p)
+          : formato === "pmxml" ? aPMXML(p)
+          : aXER(p);
+      }
       await invoke<string | null>("guardar_archivo", { ruta: destino, contenido });
       setMensaje(`Exportado ${formato.toUpperCase()}: ${destino}`);
     } catch (err) {

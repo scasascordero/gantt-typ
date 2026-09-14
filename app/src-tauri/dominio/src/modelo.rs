@@ -143,6 +143,20 @@ pub struct Fila {
     pub costo_unitario: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub costo: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avance_serie: Option<Vec<f64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub formato_barra: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub negrita: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub italica: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_texto: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vinculo: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ocultar_subtareas: Option<bool>,
 }
 
 pub fn interpretar_predecesoras(valor: &serde_yaml::Value) -> Vec<Dep> {
@@ -203,6 +217,14 @@ pub fn interpretar_predecesoras(valor: &serde_yaml::Value) -> Vec<Dep> {
 }
 
 pub fn interpretar_avance(valor: &serde_yaml::Value) -> f64 {
+    interpretar_avance_completo(valor).0
+}
+
+// Como `interpretar_avance`, pero además devuelve la serie de incrementos
+// cuando el avance vino como lista o texto ";": `(avance, Some(serie))`;
+// un avance simple da `(avance, None)`. Es lo que necesita la inyección
+// a Typst para replicar `interpretar-avance` de datos.typ.
+pub fn interpretar_avance_completo(valor: &serde_yaml::Value) -> (f64, Option<Vec<f64>>) {
     use serde_yaml::Value;
     let a_avance = |v: &Value| -> f64 {
         if es_vacio(v) { return 0.0; }
@@ -223,13 +245,19 @@ pub fn interpretar_avance(valor: &serde_yaml::Value) -> f64 {
         if es_pct { valor / 100.0 } else if valor > 1.0 { valor / 100.0 } else { valor }
     };
 
-    match valor {
-        Value::Sequence(arr) => arr.iter().map(|x| a_avance(x)).sum::<f64>().min(1.0),
+    let serie: Vec<f64> = match valor {
+        Value::Sequence(arr) => arr.iter().map(|x| a_avance(x)).collect(),
         Value::String(s) if s.contains(';') => s.split(';').map(|x| {
             let v = Value::String(x.trim().to_string());
             a_avance(&v)
-        }).sum::<f64>().min(1.0),
-        _ => a_avance(valor),
+        }).collect(),
+        _ => Vec::new(),
+    };
+
+    if serie.is_empty() {
+        (a_avance(valor), None)
+    } else {
+        (serie.iter().copied().sum::<f64>().min(1.0), Some(serie))
     }
 }
 

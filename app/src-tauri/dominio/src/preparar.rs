@@ -20,6 +20,22 @@ fn a_numero_o(v: Option<&serde_yaml::Value>) -> Option<f64> {
     }
 }
 
+fn a_bool_o(v: Option<&serde_yaml::Value>) -> Option<bool> {
+    match v {
+        Some(serde_yaml::Value::Bool(b)) => Some(*b),
+        Some(serde_yaml::Value::String(s)) if s.to_lowercase() == "true" => Some(true),
+        Some(serde_yaml::Value::String(s)) if s.to_lowercase() == "false" => Some(false),
+        _ => None,
+    }
+}
+
+fn a_texto(v: Option<&serde_yaml::Value>) -> Option<String> {
+    match v {
+        Some(val) if !es_vacio(val) => Some(val.as_str().unwrap_or("").to_string()),
+        _ => None,
+    }
+}
+
 fn resolver_hoja(
     ctx: &Ctx,
     codigo: &str,
@@ -396,6 +412,16 @@ pub fn preparar_proyecto(texto: &str, opts: &OpcionesCpm) -> Result<Vec<Fila>, S
             unidad: r.unidad,
             costo_unitario: r.costo_unitario,
             costo: r.costo,
+            avance_serie: {
+                let v = campo(&item.map, "avance").unwrap_or(&serde_yaml::Value::Null);
+                interpretar_avance_completo(v).1
+            },
+            formato_barra: a_texto(campo(&item.map, "formato-barra")),
+            negrita: a_bool_o(campo(&item.map, "negrita")),
+            italica: a_bool_o(campo(&item.map, "italica")),
+            color_texto: a_texto(campo(&item.map, "color-texto")),
+            vinculo: a_texto(campo(&item.map, "vinculo")),
+            ocultar_subtareas: a_bool_o(campo(&item.map, "ocultar-subtareas")),
         });
     }
 

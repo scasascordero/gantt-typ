@@ -340,6 +340,12 @@ body,
   background: #e2e8f0;
 }
 
+.editor-oculto .panel-editor,
+.editor-oculto .divisor {
+  visibility: hidden;
+  overflow: hidden;
+}
+
 .zoom-barra {
   display: flex;
   align-items: center;

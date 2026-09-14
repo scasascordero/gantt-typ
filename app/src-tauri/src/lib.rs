@@ -150,7 +150,8 @@ async fn elegir_destino(
             dialogo = dialogo.set_directory(c);
         }
         dialogo
-            .add_filter("Documentos", &["pdf", "svg", "xml", "xer"])
+            .add_filter("Documentos", &["pdf", "svg", "xml", "xer", "xlsx"])
+            .add_filter("Excel", &["xlsx"])
             .add_filter("Todos", &["*"])
             .save_file()
     })
@@ -367,6 +368,46 @@ async fn filas_a_yaml(
     Ok(dominio::inyeccion::filas_a_yaml(&filas))
 }
 
+// Exporta el plan a un libro Excel real (.xlsx). A diferencia de las demás
+// exportaciones el contenido es binario, así que el comando escribe directo
+// en `destino` (o en un archivo temporal si no se pasó) y devuelve la ruta.
+#[tauri::command]
+async fn exportar_excel(
+    texto: String,
+    inicio_proyecto: Option<String>,
+    termino_proyecto: Option<String>,
+    destino: Option<String>,
+) -> Result<String, String> {
+    let filas = preparar_proyecto(
+        &texto,
+        &OpcionesCpm {
+            cpm: true,
+            inicio_proyecto,
+            termino_proyecto,
+        },
+    )?;
+    let nombre = extraer_nombre(&texto).unwrap_or_else(|| "proyecto".to_string());
+    let p = exportar::proyecto(&nombre, filas);
+    let bytes = dominio::excel::a_excel(&p)?;
+
+    let ruta = match destino {
+        Some(d) => PathBuf::from(d),
+        None => {
+            let milis = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|e| e.to_string())?
+                .as_millis();
+            std::env::temp_dir().join(format!("carta-gantt-{milis}.xlsx"))
+        }
+    };
+    if let Some(padre) = ruta.parent() {
+        let _ = std::fs::create_dir_all(padre);
+    }
+    std::fs::write(&ruta, bytes)
+        .map_err(|e| format!("no se pudo guardar '{}': {e}", ruta.display()))?;
+    Ok(ruta.to_string_lossy().to_string())
+}
+
 // Primer nombre razonable para el proyecto exportado: el campo 'nombre' de
 // la raíz, el primer título de nivel 0 o un nombre genérico.
 fn extraer_nombre(texto: &str) -> Option<String> {
@@ -421,7 +462,8 @@ pub fn run() {
             guardar_proyecto,
             cargar_proyecto,
             exportar_plan,
-            filas_a_yaml
+            filas_a_yaml,
+            exportar_excel
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

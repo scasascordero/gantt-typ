@@ -60,6 +60,7 @@ function App() {
   const [mensaje, setMensaje] = useState("");
   const [zoom, setZoom] = useState(1);
   const [anchoEditorPct, setAnchoEditorPct] = useState(40);
+  const [editorOculto, setEditorOculto] = useState(false);
   const [arrastrandoDivisor, setArrastrandoDivisor] = useState(false);
   const contenidoRef = useRef<HTMLElement | null>(null);
   const [parametros, setParametros] = useState<Record<string, Valor>>(() => valoresDefault());
@@ -731,6 +732,22 @@ function App() {
     }
   };
 
+  const exportarExcel = async () => {
+    const destino = await elegirDestino("xlsx");
+    if (!destino) return;
+    try {
+      const ruta = await invoke<string>("exportar_excel", {
+        texto: textoRef.current,
+        inicioProyecto: fechaOpt("inicio-proyecto"),
+        terminoProyecto: fechaOpt("termino-proyecto"),
+        destino,
+      });
+      setMensaje(`Excel exportado: ${ruta}`);
+    } catch (err) {
+      setMensaje(`Error al exportar Excel: ${String(err)}`);
+    }
+  };
+
   const estados: "ok" | "error" | "compilando" = errores.length
     ? "error"
     : svg
@@ -767,6 +784,9 @@ function App() {
           <button onClick={() => exportarPlan("xer")} title="Primavera P6 XER (.xer)">
             XER
           </button>
+          <button onClick={exportarExcel} title="Excel (.xlsx)">
+            Excel
+          </button>
         </span>
         {mensaje && <span className="mensaje">{mensaje}</span>}
       </header>
@@ -802,6 +822,12 @@ function App() {
           <button onClick={() => guardarDoc(true)} title="Guardar como…">
             Guardar como…
           </button>
+          <button
+            onClick={() => setEditorOculto((o) => !o)}
+            title="Ocultar o mostrar el editor YAML (la carta usa todo el ancho)"
+          >
+            {editorOculto ? "Mostrar YAML" : "Ocultar YAML"}
+          </button>
           <button onClick={() => setMenuProyectosAbierto(true)} title="Proyectos guardados en la biblioteca">
             Proyectos…
           </button>
@@ -812,9 +838,13 @@ function App() {
       </div>
 
       <main
-        className="contenido"
+        className={`contenido${editorOculto ? " editor-oculto" : ""}`}
         ref={contenidoRef}
-        style={{ gridTemplateColumns: `minmax(280px, ${anchoEditorPct}%) 7px 1fr` }}
+        style={{
+          gridTemplateColumns: editorOculto
+            ? "0px 0px 1fr"
+            : `minmax(280px, ${anchoEditorPct}%) 7px 1fr`,
+        }}
       >
         <section className="panel-editor" onContextMenu={alClicDerechoEditor}>
           <div ref={contenedorEditor} className="editor" />

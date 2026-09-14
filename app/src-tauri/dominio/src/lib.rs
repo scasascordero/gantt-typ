@@ -1,5 +1,6 @@
 pub mod cpm;
 pub mod db;
+pub mod excel;
 pub mod exportar;
 pub mod fechas;
 pub mod inyeccion;

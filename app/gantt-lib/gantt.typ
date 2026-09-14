@@ -170,7 +170,130 @@
 // --- Función principal ----------------------------------------------------
 
 // tareas: lista cruda (de leer-yaml/leer-csv) o ya preparada con preparar-tareas.
-#let carta-gantt(
+// --- Sección `config:` del archivo de datos --------------------------------
+// Un YAML de la forma { config: {...}, tareas: [...] } puede llevar los
+// parámetros de carta-gantt dentro del propio archivo. Precedencia:
+//   valor por defecto  <  `config:` del YAML  <  argumento explícito en .typ
+// Los valores llegan como texto/número/bool de YAML y se endureen aquí:
+//   longitud:  0.7 | "0.7cm" | "12pt" | "8mm" | "auto"
+//   color:     "#2563eb" (o cualquier formato rgb() de Typst como texto)
+//   triestado: "auto" | true | false
+//   niveles:   "auto" | entero
+
+#let claves-config = (
+  "titulo", "ancho-nombre", "ancho-linea-tiempo", "alto-fila", "margen",
+  "margenes", "pagina", "fuente", "tamano-fuente", "indent-por-nivel",
+  "color-grupo", "color-tarea", "color-avance", "color-hito", "color-texto",
+  "color-rejilla", "color-calendario", "color-hoy", "mostrar-codigo",
+  "mostrar-duracion", "mostrar-barra-grupo", "mostrar-hoy", "ventana-inicio",
+  "ventana-fin", "nivel-anio", "nivel-mes", "nivel-semana", "nivel-dia",
+  "mostrar-dia-inicio-semana", "mostrar-columnas", "mostrar-niveles",
+  "mostrar-serie-avance", "mostrar-avance", "cpm", "inicio-proyecto",
+  "termino-proyecto", "resaltar-critico", "color-critico",
+  "mostrar-dependencias", "color-dependencia", "esquema-vinculo",
+)
+
+#let c-longitud(v) = {
+  if v == "auto" { auto }
+  else if type(v) == str {
+    let s = v.trim()
+    if s.ends-with("mm") { float(s.slice(0, -2)) * 1mm }
+    else if s.ends-with("cm") { float(s.slice(0, -2)) * 1cm }
+    else if s.ends-with("pt") { float(s.slice(0, -2)) * 1pt }
+    else { float(s) * 1cm }
+  } else if type(v) == int or type(v) == float { v * 1cm }
+  else { v }
+}
+
+#let c-color(v) = if type(v) == str { rgb(v.trim()) } else { v }
+
+#let c-bool(v) = {
+  if type(v) == bool { v }
+  else if type(v) == str {
+    let s = v.trim().lower()
+    assert(s == "true" or s == "false", message: "config: valor booleano inválido: " + v)
+    s == "true"
+  } else { assert(false, message: "config: se esperaba booleano, llegó: " + str(v)) }
+}
+
+#let c-tri(v) = if v == "auto" { auto } else { c-bool(v) }
+
+#let c-niveles(v) = if v == "auto" or v == "auto " { auto } else { int(v) }
+
+#let c-columnas(v) = {
+  if type(v) == array { v.map(x => str(x)) }
+  else { assert(false, message: "config: mostrar-columnas debe ser una lista de textos") }
+}
+
+// Lee la sección config de los datos crudos (dict con clave "config").
+#let leer-config(tareas) = {
+  let cfg = if type(tareas) == dictionary { tareas.at("config", default: none) } else { none }
+  if cfg == none { (: ) } // (: ) = diccionario vacío (ojo: () es una lista)
+  else {
+    assert(type(cfg) == dictionary, message: "carta-gantt: la clave 'config' debe ser un mapa de parámetros")
+    for k in cfg.keys() {
+      assert(k != "tareas", message: "carta-gantt: la lista 'tareas' debe ir al nivel raíz del archivo, no dentro de 'config:'")
+      assert(k in claves-config, message: "carta-gantt: clave de 'config' desconocida: " + k)
+    }
+    cfg
+  }
+}
+
+// Dibuja la barra de una actividad según su campo opcional `formato-barra`:
+//   none/"solida" -> relleno claro (default de tarea) o contorno (grupos)
+//   "contorno"    -> solo el borde, siempre
+//   "rayas"       -> fondo muy claro + rayas verticales
+//   "gradiente"   -> degradado horizontal del color de la tarea
+#let dibujar-barra-f(f, x1, y-top, x2, y-bot, color-base, es-grupo: false) = {
+  let fmt = f.at("formato-barra", default: none)
+  if fmt == "contorno" {
+    caja(x1, y-top, x2, y-bot, relleno: none, trazo: 0.8pt + color-base, radio: 1.5pt)
+  } else if fmt == "gradiente" {
+    let relleno-grad = gradient.linear(color-base.lighten(55%), color-base.lighten(10%), angle: 90deg)
+    caja(x1, y-top, x2, y-bot, relleno: relleno-grad, radio: 1.5pt)
+  } else if fmt == "rayas" {
+    caja(x1, y-top, x2, y-bot, relleno: color-base.lighten(78%), radio: 1.5pt)
+    let paso = 4pt
+    let n = int(calc.floor((x2 - x1) / paso))
+    for k in range(n + 1) {
+      let xs = x1 + k * paso
+      if xs < x2 - 0.5pt {
+        linea(xs, y-top + 1.2pt, xs, y-bot - 1.2pt, trazo: 1.2pt + color-base)
+      }
+    }
+  } else if es-grupo {
+    caja(x1, y-top, x2, y-bot, relleno: none, trazo: 0.6pt + color-base, radio: 1.5pt)
+  } else {
+    caja(x1, y-top, x2, y-bot, relleno: color-base.lighten(35%), radio: 1.5pt)
+  }
+}
+
+// Formato de importes: separador de miles "." y decimal "," con hasta
+// dos decimales (1234567.5 -> "1.234.567,50").
+#let mod3(x) = {
+  let q = int(x / 3)
+  x - q * 3
+}
+
+#let agrupar-miles(n) = {
+  let digits = str(int(calc.abs(n)))
+  let out = ""
+  for i in range(digits.len()) {
+    out += digits.slice(i, i + 1)
+    if i < digits.len() - 1 and mod3(digits.len() - 1 - i) == 0 { out += "." }
+  }
+  if n < 0 { "-" + out } else { out }
+}
+
+#let formatear-importe(v) = {
+  let r = calc.round(v * 100) / 100
+  let entero = int(calc.floor(r))
+  let frac = calc.round((r - entero) * 100)
+  let fs = if frac == 0 { "" } else if frac < 10 { ",0" + str(frac) } else { "," + str(frac) }
+  agrupar-miles(entero) + fs
+}
+
+#let _carta-gantt-interna(
   tareas,
   titulo: none,
   ancho-nombre: auto,       // longitud, o `auto` para medir el texto más ancho
@@ -305,6 +428,10 @@
       inicio: "Inicio",
       termino: "Término",
       avance: "Avance",
+      cantidad: "Cantidad",
+      unidad: "Unidad",
+      "costo-unitario": "C. unitario",
+      costo: "Costo",
       holgura: "Holgura",
       critico: "Crít.",
       "inicio-temprano": "Ini. temp.",
@@ -317,6 +444,22 @@
       else if col == "inicio" { formatear-fecha(fecha-desde-dias(f.inicio-dias)) }
       else if col == "termino" { formatear-fecha(fecha-desde-dias(f.termino-dias)) }
       else if col == "avance" { str(calc.round(f.avance * 100)) + "%" }
+      else if col == "cantidad" {
+        let v = f.at("cantidad", default: none)
+        if v == none { "" } else { formatear-importe(v) }
+      }
+      else if col == "unidad" {
+        let v = f.at("unidad", default: none)
+        if v == none { "" } else { str(v) }
+      }
+      else if col == "costo-unitario" {
+        let v = f.at("costo-unitario", default: none)
+        if v == none { "" } else { formatear-importe(v) }
+      }
+      else if col == "costo" {
+        let v = f.at("costo", default: none)
+        if v == none { "" } else { formatear-importe(v) }
+      }
       else if col == "holgura" {
         let h = f.at("holgura", default: none)
         if h == none { "" } else { str(h) }
@@ -518,24 +661,32 @@
           let vinculo = f.at("vinculo", default: none)
           let enlazar = if vinculo == none { cuerpo => cuerpo } else { cuerpo => link(vinculo)[#cuerpo] }
 
-          // Nombre (con sangría por nivel de subtarea). El formato depende
-          // del nivel (todas las tareas de primer nivel van en negrita,
-          // el resto no), no de si la tarea en particular tiene o no
-          // subtareas — así todas las de un mismo nivel se ven iguales.
+          // Formato opcional por actividad: `negrita`/`italica` (true/false)
+          // y `color-texto` ("#rrggbb") afectan al nombre, sus celdas de
+          // datos y la duración. Sin clave, rige la regla por nivel (los
+          // primeros niveles van en negrita).
+          let neg = f.at("negrita", default: none)
+          let ital = f.at("italica", default: none)
+          let color-txt = f.at("color-texto", default: none)
+          let peso = if neg == true { "bold" } else if neg == false { "regular" } else if f.nivel == 0 { "bold" } else { "regular" }
+          let estilo = if ital == true { "italic" } else { "normal" }
+          let relleno-txt = if color-txt != none { c-color(color-txt) } else { color-texto }
+          let texto-f = contenido => text(weight: peso, style: estilo, fill: relleno-txt, size: tamano-fuente)[#contenido]
+
+          // Nombre (con sangría por nivel de subtarea).
           let x-nombre = f.nivel * indent-por-nivel + 0.15cm
           let prefijo = if mostrar-codigo and f.codigo != "" { f.codigo + ". " } else { "" }
-          let peso = if f.nivel == 0 { "bold" } else { "regular" }
           texto(
             x-nombre, y-centro,
-            enlazar(text(weight: peso)[#prefijo#f.nombre]),
+            enlazar(texto-f[#prefijo#f.nombre]),
             halign: "izquierda",
           )
 
-          // Columnas de datos opcionales (duración/inicio/término/avance).
+          // Columnas de datos opcionales (duración/inicio/término/avance...).
           for (j, col) in mostrar-columnas.enumerate() {
             let cx1 = col-x-inicios.at(j)
             let cx2 = cx1 + anchos-columnas.at(j)
-            texto((cx1 + cx2) / 2, y-centro, enlazar(text[#valor-columna(f, col)]))
+            texto((cx1 + cx2) / 2, y-centro, enlazar(texto-f[#valor-columna(f, col)]))
           }
 
           // Barra en la línea de tiempo. Las coordenadas "-real" son la
@@ -571,7 +722,7 @@
                 // extremos, para no competir visualmente con sus hijas.
                 let alto-barra = alto-fila * 0.62
                 let y-top = y-centro - alto-barra / 2
-                caja(x1, y-top, x2, y-top + alto-barra, relleno: none, trazo: 0.6pt + color-base, radio: 1.5pt)
+                dibujar-barra-f(f, x1, y-top, x2, y-top + alto-barra, color-base, es-grupo: true)
                 // Avance: barra gris centrada en la barra principal (ver
                 // dibujar-avance para el detalle de alturas y redondeos).
                 if mostrar-avance {
@@ -581,7 +732,7 @@
             } else {
               let alto-barra = alto-fila * 0.62
               let y-top = y-centro - alto-barra / 2
-              caja(x1, y-top, x2, y-top + alto-barra, relleno: color-base.lighten(35%), radio: 1.5pt)
+              dibujar-barra-f(f, x1, y-top, x2, y-top + alto-barra, color-base, es-grupo: false)
               // Avance: barra gris centrada en la barra principal (ver
               // dibujar-avance para el detalle de alturas y redondeos).
               if mostrar-avance {
@@ -593,7 +744,7 @@
           // Duración, a la derecha de la barra (solo si el término real de
           // la tarea es visible dentro de la ventana).
           if mostrar-duracion and not f.hito and not fuera-de-ventana and x2-real <= ancho-total {
-            texto(x2-real + 0.1cm, y-centro, enlazar(text(size: tamano-fuente * 0.85, fill: color-texto)[#f.duracion#{"d"}]), halign: "izquierda")
+            texto(x2-real + 0.1cm, y-centro, enlazar(text(weight: peso, style: estilo, size: tamano-fuente * 0.85, fill: relleno-txt)[#f.duracion#{"d"}]), halign: "izquierda")
           }
 
           // Zona clicable de la barra (rectángulo transparente sobre el tramo
@@ -715,4 +866,108 @@
   } else {
     layout(disponible => construir(disponible.width))
   }
+}
+
+// --- API pública -----------------------------------------------------------
+// Mismo contrato que `_carta-gantt-interna`, pero con los parámetros en
+// `none` como centinela para poder intercalar la sección `config:` del
+// archivo de datos: valor explícito en .typ > config del YAML > default.
+#let carta-gantt(
+  tareas,
+  titulo: none,
+  ancho-nombre: none,
+  ancho-linea-tiempo: none,
+  alto-fila: none,
+  margen: none,
+  margenes: none,
+  pagina: none,
+  fuente: none,
+  tamano-fuente: none,
+  indent-por-nivel: none,
+  color-grupo: none,
+  color-tarea: none,
+  color-avance: none,
+  color-hito: none,
+  color-texto: none,
+  color-rejilla: none,
+  color-calendario: none,
+  color-hoy: none,
+  color: none,
+  mostrar-codigo: none,
+  mostrar-duracion: none,
+  mostrar-barra-grupo: none,
+  mostrar-hoy: none,
+  ventana-inicio: none,
+  ventana-fin: none,
+  nivel-anio: none,
+  nivel-mes: none,
+  nivel-semana: none,
+  nivel-dia: none,
+  mostrar-dia-inicio-semana: none,
+  mostrar-columnas: none,
+  mostrar-niveles: none,
+  mostrar-serie-avance: none,
+  mostrar-avance: none,
+  cpm: none,
+  inicio-proyecto: none,
+  termino-proyecto: none,
+  resaltar-critico: none,
+  color-critico: none,
+  mostrar-dependencias: none,
+  color-dependencia: none,
+  vinculos: none,
+  esquema-vinculo: none,
+) = {
+  let cfg = leer-config(tareas)
+  let v = (arg, clave, def, conv) => {
+    if arg != none { arg }
+    else if cfg.at(clave, default: none) != none { conv(cfg.at(clave)) }
+    else { def }
+  }
+  _carta-gantt-interna(
+    tareas,
+    titulo: v(titulo, "titulo", none, x => x),
+    ancho-nombre: v(ancho-nombre, "ancho-nombre", auto, c-longitud),
+    ancho-linea-tiempo: v(ancho-linea-tiempo, "ancho-linea-tiempo", auto, c-longitud),
+    alto-fila: v(alto-fila, "alto-fila", 0.6cm, c-longitud),
+    margen: v(margen, "margen", 1cm, c-longitud),
+    margenes: v(margenes, "margenes", true, c-bool),
+    pagina: v(pagina, "pagina", true, c-bool),
+    fuente: v(fuente, "fuente", "Liberation Sans", x => x),
+    tamano-fuente: v(tamano-fuente, "tamano-fuente", 8pt, c-longitud),
+    indent-por-nivel: v(indent-por-nivel, "indent-por-nivel", 0.4cm, c-longitud),
+    color-grupo: v(color-grupo, "color-grupo", rgb("#475569"), c-color),
+    color-tarea: v(color-tarea, "color-tarea", rgb("#2563eb"), c-color),
+    color-avance: v(color-avance, "color-avance", rgb("#6b7280"), c-color),
+    color-hito: v(color-hito, "color-hito", rgb("#dc2626"), c-color),
+    color-texto: v(color-texto, "color-texto", rgb("#1e293b"), c-color),
+    color-rejilla: v(color-rejilla, "color-rejilla", rgb("#e2e8f0"), c-color),
+    color-calendario: v(color-calendario, "color-calendario", rgb("#f8fafc"), c-color),
+    color-hoy: v(color-hoy, "color-hoy", rgb("#dc2626"), c-color),
+    color: v(color, "color", none, x => x),
+    mostrar-codigo: v(mostrar-codigo, "mostrar-codigo", true, c-bool),
+    mostrar-duracion: v(mostrar-duracion, "mostrar-duracion", false, c-bool),
+    mostrar-barra-grupo: v(mostrar-barra-grupo, "mostrar-barra-grupo", true, c-bool),
+    mostrar-hoy: v(mostrar-hoy, "mostrar-hoy", false, c-bool),
+    ventana-inicio: v(ventana-inicio, "ventana-inicio", none, x => x),
+    ventana-fin: v(ventana-fin, "ventana-fin", none, x => x),
+    nivel-anio: v(nivel-anio, "nivel-anio", auto, c-tri),
+    nivel-mes: v(nivel-mes, "nivel-mes", auto, c-tri),
+    nivel-semana: v(nivel-semana, "nivel-semana", auto, c-tri),
+    nivel-dia: v(nivel-dia, "nivel-dia", auto, c-tri),
+    mostrar-dia-inicio-semana: v(mostrar-dia-inicio-semana, "mostrar-dia-inicio-semana", false, c-bool),
+    mostrar-columnas: v(mostrar-columnas, "mostrar-columnas", (), c-columnas),
+    mostrar-niveles: v(mostrar-niveles, "mostrar-niveles", auto, c-niveles),
+    mostrar-serie-avance: v(mostrar-serie-avance, "mostrar-serie-avance", true, c-bool),
+    mostrar-avance: v(mostrar-avance, "mostrar-avance", true, c-bool),
+    cpm: v(cpm, "cpm", false, c-bool),
+    inicio-proyecto: v(inicio-proyecto, "inicio-proyecto", none, x => x),
+    termino-proyecto: v(termino-proyecto, "termino-proyecto", none, x => x),
+    resaltar-critico: v(resaltar-critico, "resaltar-critico", true, c-bool),
+    color-critico: v(color-critico, "color-critico", rgb("#dc2626"), c-color),
+    mostrar-dependencias: v(mostrar-dependencias, "mostrar-dependencias", true, c-bool),
+    color-dependencia: v(color-dependencia, "color-dependencia", rgb("#64748b"), c-color),
+    vinculos: v(vinculos, "vinculos", none, x => x),
+    esquema-vinculo: v(esquema-vinculo, "esquema-vinculo", "vscodium", x => x),
+  )
 }

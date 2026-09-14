@@ -1,0 +1,92 @@
+# Datos con configuración embebida: la sección `config:` reemplaza los
+# defaults de carta-gantt (un argumento explícito en el .typ sigue pudiendo
+# más que el config). Las tareas usan los campos opcionales nuevos:
+# formato-barra, negrita, italica, color-texto, ocultar-subtareas y costos.
+config:
+  titulo: "Plan con config, formatos y costos"
+  alto-fila: "0.7cm"
+  color-tarea: "#0d9488"
+  color-avance: "#334155"
+  mostrar-duracion: true
+  mostrar-columnas: ["inicio", "termino", "avance", "cantidad", "unidad", "costo-unitario", "costo"]
+
+tareas:
+  - codigo: "PR"
+    nombre: Proyecto centro de distribución
+    # inicio/término/avance/costo se calculan solos como rollup de las hijas
+    subtareas:
+      - codigo: "1"
+        nombre: Preparación del sitio
+        inicio: 2026-01-05
+        duracion: 12
+        avance: 1.0
+        subtareas:
+          - codigo: "1.1"
+            nombre: Estudio de suelo
+            inicio: 2026-01-05
+            duracion: 5
+            avance: 1.0
+            cantidad: 1
+            unidad: "ensayo"
+            costo-unitario: 450000
+          - codigo: "1.2"
+            nombre: Desmaleza y limpieza
+            inicio: 2026-01-10
+            duracion: 7
+            avance: 1.0
+            formato-barra: rayas
+            cantidad: 3.5
+            unidad: "ha"
+            costo-unitario: 280000
+
+      - codigo: "2"
+        nombre: Obra civil
+        inicio: 2026-02-01
+        duracion: 90
+        avance: 0.35
+        negrita: true
+        color-texto: "#b91c1c"
+        subtareas:
+          - codigo: "2.1"
+            nombre: Movimiento de suelo
+            inicio: 2026-02-01
+            duracion: 15
+            avance: 0.8
+            formato-barra: gradiente
+            cantidad: 1200
+            unidad: "m3"
+            costo-unitario: 4200
+          - codigo: "2.2"
+            nombre: Subcontractistas varios (ocultos)
+            ocultar-subtareas: true
+            inicio: 2026-02-20
+            duracion: 25
+            formato-barra: contorno
+            italica: true
+            subtareas:
+              - codigo: "2.2.1"
+                nombre: Rede eléctrica (no se dibuja)
+                inicio: 2026-02-20
+                duracion: 10
+                cantidad: 1
+                unidad: "lp"
+                costo-unitario: 8500000
+              - codigo: "2.2.2"
+                nombre: Gasistas (no se dibuja)
+                inicio: 2026-03-02
+                duracion: 12
+                cantidad: 2
+                unidad: "partida"
+                costo-unitario: 3100000
+
+      - codigo: "3"
+        nombre: "Hito: cierre de etapa civil"
+        inicio: 2026-05-01
+
+      - codigo: "4"
+        nombre: Cierre y documentación
+        inicio: 2026-05-04
+        duracion: 20
+        cantidad: 1
+        unidad: "global"
+        costo: 2500000

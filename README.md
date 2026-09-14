@@ -30,6 +30,8 @@ ejemplos/
   ejemplo-cpm.typ             -> CPM: fechas calculadas desde predecesoras + ruta crítica + flechas
   ejemplo-cpm-proyecto.typ    -> CPM a 2 años (~20 tareas en 4 frentes), cabecera solo años y meses
   ejemplo-vinculos.typ        -> clic en una tarea -> salta a su línea en tareas-vinculos.yaml (VS Code)
+  datos-config.yaml           -> datos con sección config:, barras especiales y costos
+  ejemplo-config.typ          -> carta-gantt sin argumentos: todo viene del YAML
   tareas-vinculos.yaml        -> datos de ejemplo del salto a línea
 herramientas/
   xlsx_a_datos.py              -> conversor opcional Excel -> yaml/csv
@@ -161,6 +163,41 @@ obligatorias en una tarea sin subtareas):
 | `hito`     | `true` para forzar que se dibuje como hito (rombo) aunque tenga duración |
 | `predecesoras` | Dependencias para el CPM (ver "CPM") — solo tiene efecto con `cpm: true` |
 | `vinculo`      | URI (p. ej. `vscode://file/...`) con el que se vuelve clicable la fila (nombre, celdas y barra) para abrir la línea correspondiente en tu editor — ver "Salto a línea en el editor" |
+| `formato-barra`| Formato especial de la barra de esta actividad: `"solida"` (default), `"contorno"` (solo borde), `"rayas"` (fondo claro + rayas verticales) o `"gradiente"` |
+| `negrita`      | `true`/`false` — fuerza negrita (o la quita) en el nombre, celdas y duración de esta fila; sin clave rige la regla por nivel |
+| `italica`      | `true`/`false` — cursiva para el texto de esta fila |
+| `color-texto`  | `"#rrggbb"` — color del texto de esta fila (nombre, celdas de fechas y duración) |
+| `ocultar-subtareas` | `true` — no dibuja el subárbol de esta actividad (independiente de `mostrar-niveles`); sus fechas/avance/costos siguen siendo el rollup completo |
+| `cantidad`     | número de unidades (para el cálculo de costo) |
+| `unidad`       | texto descriptivo de la unidad (`"m3"`, `"ha"`, `"lp"`…) |
+| `costo-unitario` | precio por unidad |
+| `costo`        | se calcula como `cantidad × costo-unitario`; un `costo` explícito manda. En actividades con subtareas, el `costo` es la **suma de las hijas** (acumulable por niveles). Visible con la columna `costo` |
+
+### Configuración dentro del archivo: `config:`
+
+Además de la lista de tareas, el archivo puede empezar con un mapa `config:`
+que reemplaza los valores por defecto de `carta-gantt`. La precedencia es:
+
+**argumento explícito en el `.typ` > `config:` del YAML > valores por defecto**
+
+```yaml
+config:
+  titulo: "Cronograma de obra"      # texto
+  alto-fila: "0.7cm"                 # longitud como texto (también admite "12pt")
+  color-tarea: "#0d9488"             # color como "#rrggbb"
+  mostrar-duracion: true             # booleanos normales
+  mostrar-columnas: ["inicio", "termino", "avance", "costo"]
+  mostrar-niveles: 2                 # entero o "auto"
+tareas:
+  - codigo: "1"
+    ...
+```
+
+Cualquier parámetro de la tabla de la API puede ir en `config:` (salvo
+`color` y `vinculos`, que son funciones/datos que se pasan desde el `.typ`).
+Una clave desconocida detiene la compilación con un mensaje claro.
+Ver [ejemplos/ejemplo-config.typ](ejemplos/ejemplo-config.typ) con
+[ejemplos/datos-config.yaml](ejemplos/datos-config.yaml).
 
 Basta con **inicio + duracion**, o **inicio + termino** — lo que falte se
 calcula solo. Si no se da ni `duracion` ni `termino`, la tarea se dibuja
@@ -415,6 +452,9 @@ que hay dos caminos igual de válidos:
 
 `tareas` puede ser el resultado crudo de `yaml(...)`/`csv(..., row-type: dictionary)`
 (lista, o mapa `{ tareas: [...] }`), o ya procesada con `preparar-tareas`.
+Si el mapa trae además una clave `config:` (ver arriba), sus valores reemplazan
+a los por defecto de esta tabla; los argumentos explícitos del `.typ` siguen
+teniendo prioridad sobre `config:`.
 
 Opciones principales:
 
@@ -446,7 +486,7 @@ Opciones principales:
 | `nivel-semana` | `auto` (se activa si la ventana visible dura ≤ 200 días) \| `true` \| `false` | `auto` | Muestra u oculta la banda de semanas (bloques de 7 días numerados `S1, S2, ...` desde el inicio de la ventana) |
 | `nivel-dia` | `auto` (se activa si la ventana visible dura ≤ 45 días) \| `true` \| `false` | `auto` | Muestra u oculta la banda de días; si la columna de cada día queda muy angosta se sigue dibujando la rejilla pero se omite el número |
 | `mostrar-dia-inicio-semana` | `true` \| `false` | `false` | En la banda de semanas, agrega el día del mes en que arranca cada semana, alineado a la izquierda de su celda (junto al `S1`, `S2`, ... centrado) |
-| `mostrar-columnas` | una lista con cualquier subconjunto y orden de `("duracion", "inicio", "termino", "avance", "inicio-temprano", "termino-temprano", "inicio-tardio", "termino-tardio", "holgura", "critico")` | `()` (ninguna) | Agrega columnas de datos entre el nombre y la línea de tiempo, con ancho automático; `inicio`/`termino` se muestran como `DD-MM-AAAA` y `avance` como porcentaje entero |
+| `mostrar-columnas` | una lista con cualquier subconjunto y orden de `("duracion", "inicio", "termino", "avance", "cantidad", "unidad", "costo-unitario", "costo", "inicio-temprano", "termino-temprano", "inicio-tardio", "termino-tardio", "holgura", "critico")` | `()` (ninguna) | Agrega columnas de datos entre el nombre y la línea de tiempo, con ancho automático; `inicio`/`termino` se muestran como `DD-MM-AAAA`, `avance` como porcentaje entero y los importes con miles `.` y decimal `,` |
 | `cpm` | `true` \| `false` | `false` | Activa el motor CPM: calcula las fechas desde `predecesoras` (ver "CPM") |
 | `inicio-proyecto` | `none` \| `"AAAA-MM-DD"` | `none` | Fecha base del proyecto para el CPM, cuando no sale sola de las anclas |
 | `termino-proyecto` | `none` \| `"AAAA-MM-DD"` | `none` | Fecha de fin del proyecto para el CPM (referencia de las holguras), cuando no sale sola |

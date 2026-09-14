@@ -236,9 +236,19 @@
   if hijos.len() == 0 {
     let f = if fechas-de != none { fechas-de.at(codigo) } else { resolver-fechas-hoja(item) }
     let av = interpretar-avance(item.at("avance", default: none))
+    // Costos: `cantidad` x `costo-unitario` = `costo`; un `costo` explícito
+    // manda sobre el producto. `unidad` es solo texto descriptivo.
+    let cantidad = a-numero(item.at("cantidad", default: none))
+    let cu = a-numero(item.at("costo-unitario", default: none))
+    let costo-expl = a-numero(item.at("costo", default: none))
+    let costo = if costo-expl != none { costo-expl }
+      else if cantidad != none and cu != none { cantidad * cu }
+      else { none }
     (
       inicio-dias: f.inicio-dias, termino-dias: f.termino-dias, duracion: f.duracion,
       avance: av.avance, avance-serie: av.serie,
+      cantidad: cantidad, unidad: item.at("unidad", default: none),
+      costo-unitario: cu, costo: costo,
     )
   } else {
     let sub = hijos.map(h => resolver-nodo(indice, h, fechas-de: fechas-de))
@@ -271,9 +281,23 @@
       (v, none)
     }
 
+    // Rollup de costos: el `costo` de un grupo es la suma de los costos de
+    // sus hijas (acumulable por niveles); `costo` explícito manda. Cantidad/
+    // unidad/costo-unitario son propios de las hojas y los grupos los heredan
+    // solo si los declaran explícitamente.
+    let costos-hijos = sub.map(s => s.costo).filter(v => v != none)
+    let costo-expl = a-numero(item.at("costo", default: none))
+    let costo = if costo-expl != none { costo-expl }
+      else if costos-hijos.len() > 0 { costos-hijos.sum() }
+      else { none }
+
     (
       inicio-dias: inicio-dias, termino-dias: termino-dias, duracion: duracion,
       avance: avance, avance-serie: avance-serie,
+      cantidad: a-numero(item.at("cantidad", default: none)),
+      unidad: item.at("unidad", default: none),
+      costo-unitario: a-numero(item.at("costo-unitario", default: none)),
+      costo: costo,
     )
   }
 }
@@ -281,11 +305,18 @@
 // --- Orden de dibujo (DFS, padres antes que hijos) -----------------------
 
 // Recursivo puro: retorna la lista de (codigo, nivel) de un nodo y sus
-// descendientes, en vez de mutar un acumulador externo.
+// descendientes, en vez de mutar un acumulador externo. Un nodo con
+// `ocultar-subtareas: true` se dibuja pero su subárbol completo no emite
+// filas (independientemente de `mostrar-niveles` global); sus fechas y
+// avance siguen viniendo del rollup de TODAS las hijas.
 #let visitar-nodo(indice, codigo, nivel) = {
   let salida = ((codigo: codigo, nivel: nivel),)
-  for hijo in indice.hijos-de.at(codigo, default: ()) {
-    salida += visitar-nodo(indice, hijo, nivel + 1)
+  let item = indice.mapa.at(codigo, default: ())
+  let ocultas = item.at("ocultar-subtareas", default: false) == true
+  if not ocultas {
+    for hijo in indice.hijos-de.at(codigo, default: ()) {
+      salida += visitar-nodo(indice, hijo, nivel + 1)
+    }
   }
   salida
 }
@@ -402,6 +433,17 @@
       avance: calc.min(calc.max(r.avance, 0), 1),
       avance-serie: r.avance-serie,
       vinculo: item.at("vinculo", default: none),
+      // Formato opcional por actividad (ver gantt.typ): "solida" (default),
+      // "contorno", "rayas" o "gradiente" para la barra; negrita/italica
+      // (true/false) y color-texto ("#rrggbb") para el nombre y las celdas.
+      formato-barra: item.at("formato-barra", default: none),
+      negrita: item.at("negrita", default: none),
+      italica: item.at("italica", default: none),
+      color-texto: item.at("color-texto", default: none),
+      cantidad: r.cantidad,
+      unidad: r.unidad,
+      costo-unitario: r.costo-unitario,
+      costo: r.costo,
     )
     if not cpm { base }
     else {

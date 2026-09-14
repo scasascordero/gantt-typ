@@ -17,7 +17,8 @@ documento).
   yaml("datos.yaml"),
   pagina: false,
   titulo: [Cronograma],
-  nivel-semana: false
+  nivel-semana: false,
+  nivel-anio: true
 )
 
 O puede mostrar solamente el nivel 1:
@@ -28,7 +29,12 @@ O puede mostrar solamente el nivel 1:
   titulo: [Cronograma],
   nivel-semana: false,
   mostrar-niveles: 1,
+  nivel-anio: true,
+  ventana-inicio: "2026-03-01",
+  ventana-fin: "2026-06-30",
+  mostrar-columnas: ("inicio", "termino")
 )
+
 
 
 O la puede mostrar en una página apaisada:
@@ -40,7 +46,8 @@ O la puede mostrar en una página apaisada:
   yaml("datos.yaml"),
   pagina: false,
   titulo: [Cronograma],
-  nivel-semana: false
+  nivel-semana: false,
+  nivel-anio: true,
 )
 
 

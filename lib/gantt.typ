@@ -483,6 +483,9 @@
       }
       else { "" }
     }
+    // Columnas de importes: se alinean a la derecha de su celda.
+    let col-derecha(col) = col == "cantidad" or col == "costo-unitario" or col == "costo"
+
     let anchos-columnas = mostrar-columnas.map(col => {
       let ancho-etiqueta = measure(text(weight: "bold")[#etiquetas-columna.at(col)]).width
       let ancho-valores = filas.map(f => measure(text[#valor-columna(f, col)]).width).fold(0pt, (a, b) => calc.max(a, b))
@@ -618,7 +621,11 @@
           let cx1 = col-x-inicios.at(i)
           let cx2 = cx1 + anchos-columnas.at(i)
           caja(cx1, 0pt, cx2, y-dia-bottom, trazo: trazo-vertical)
-          texto((cx1 + cx2) / 2, y-dia-bottom / 2, text(weight: "bold", size: tamano-fuente)[#etiquetas-columna.at(col)])
+          if col-derecha(col) {
+            texto(cx2 - 0.12cm, y-dia-bottom / 2, text(weight: "bold", size: tamano-fuente)[#etiquetas-columna.at(col)], halign: "derecha")
+          } else {
+            texto((cx1 + cx2) / 2, y-dia-bottom / 2, text(weight: "bold", size: tamano-fuente)[#etiquetas-columna.at(col)])
+          }
         }
 
         // Rejilla vertical que baja desde el encabezado hasta la última
@@ -686,7 +693,11 @@
           for (j, col) in mostrar-columnas.enumerate() {
             let cx1 = col-x-inicios.at(j)
             let cx2 = cx1 + anchos-columnas.at(j)
-            texto((cx1 + cx2) / 2, y-centro, enlazar(texto-f[#valor-columna(f, col)]))
+            if col-derecha(col) {
+              texto(cx2 - 0.12cm, y-centro, enlazar(texto-f[#valor-columna(f, col)]), halign: "derecha")
+            } else {
+              texto((cx1 + cx2) / 2, y-centro, enlazar(texto-f[#valor-columna(f, col)]))
+            }
           }
 
           // Barra en la línea de tiempo. Las coordenadas "-real" son la

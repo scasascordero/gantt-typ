@@ -1,4 +1,5 @@
 *.pdf
+!ejemplos/*.pdf
 *.log
 __pycache__/
 

@@ -8,7 +8,7 @@ import ejemploDatos from "../../ejemplos/ejemplo_1.yaml?raw";
 import { compilarSvg, fuentesLibreria } from "./lib/libreria";
 import { analizarSvg } from "./lib/geometria";
 import { listarTareas } from "./lib/yamlLineas";
-import { validarTexto } from "./lib/validacion";
+import { validarTexto, idLibre } from "./lib/validacion";
 import { generarMainTyp, valoresDefault, type Valor } from "./lib/params";
 import { prepararProyecto, fechaIso, type Fila } from "./lib/proyecto";
 import { aMSPDI, aPMXML, aXER } from "./lib/exportadores";
@@ -391,6 +391,20 @@ function App() {
   const diagnosticos = useMemo(() => validarTexto(texto, cpmActivado), [texto, cpmActivado]);
   const erroresValidacion = diagnosticos.filter((x) => x.severidad === "error");
   const hayErroresValidacion = erroresValidacion.length > 0;
+
+  // Un id repetido rompe la resolución de dependencias: se renombra solo el
+  // id duplicado (la segunda aparición) para dejar el documento válido.
+  useEffect(() => {
+    const repetido = diagnosticos.find((x) => x.repetido)?.repetido;
+    if (!repetido) return;
+    const actual = textoRef.current;
+    const nuevo = idLibre(actual);
+    const corregido = editarCampo(actual, repetido.codigo, "id", nuevo);
+    if (corregido === actual) return;
+    ponerEnEditor(corregido);
+    setMensaje(`Id duplicado: renombré '${repetido.id}' → '${nuevo}'`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diagnosticos]);
 
   // Fechas resueltas con la misma lógica que la librería (port de cpm.typ),
   // para mostrar el "término" calculado de cada actividad en el panel.
@@ -1312,6 +1326,7 @@ function App() {
       {menuAbierto && (
         <MenuParametros
           valores={parametros}
+          ventanaCalculada={ventanaCalculada}
           onCambiar={cambiarParametro}
           onRestablecer={restablecerParametros}
           onCerrar={cerrarMenu}

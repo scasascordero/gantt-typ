@@ -1,7 +1,9 @@
+import type { KeyboardEvent } from "react";
 import { PARAMETROS, type ParamDef, type Valor } from "./lib/params";
 
 interface Props {
   valores: Record<string, Valor>;
+  ventanaCalculada?: { inicio: string; fin: string } | null;
   onCambiar: (clave: string, valor: Valor) => void;
   onRestablecer: () => void;
   onCerrar: () => void;
@@ -18,7 +20,25 @@ function hexCompleto(v: string): string {
   return "000000";
 }
 
-export function Fila({ p, valor, onCambiar }: { p: ParamDef; valor: Valor; onCambiar: (v: Valor) => void }) {
+// Enter en los campos de texto/número confirma el valor editado.
+const alEnter =
+  (cometer: (v: string, e: KeyboardEvent<HTMLInputElement>) => void) =>
+  (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    cometer(e.currentTarget.value, e);
+  };
+
+interface FilaProps {
+  p: ParamDef;
+  valor: Valor;
+  onCambiar: (v: Valor) => void;
+  // valor calculado a mostrar dentro del campo cuando el parámetro es
+  // automático (p. ej. los límites de la ventana cuando están vacíos).
+  fallback?: string;
+}
+
+export function Fila({ p, valor, onCambiar, fallback }: FilaProps) {
   switch (p.tipo) {
     case "color": {
       const hex = hexCompleto(String(valor));
@@ -57,24 +77,36 @@ export function Fila({ p, valor, onCambiar }: { p: ParamDef; valor: Valor; onCam
               const n = Number(e.target.value);
               if (e.target.value !== "" && Number.isFinite(n)) onCambiar(n);
             }}
+            onKeyDown={alEnter((v) => {
+              const n = Number(v);
+              if (v !== "" && Number.isFinite(n)) onCambiar(n);
+            })}
           />
           {p.unidad && <span className="param-unidad">{p.unidad}</span>}
         </span>
       );
     }
     case "texto":
-    case "fecha":
+    case "fecha": {
+      // parámetro automático (vacío) con un valor calculado disponible:
+      // el límite se muestra dentro del propio campo, con la marca "auto".
+      const auto = p.tipo === "fecha" && (valor == null || valor === "") && fallback !== undefined;
+      const mostrado = auto ? fallback : String(valor);
+      const commit = (v: string) => onCambiar(auto && v === fallback ? "" : v);
       return (
         <span className="param-control">
           <input
-            type={p.tipo === "fecha" ? "text" : "text"}
+            type="text"
             placeholder={p.tipo === "fecha" ? "AAAA-MM-DD" : ""}
-            value={String(valor)}
+            value={mostrado}
             spellCheck={false}
-            onChange={(e) => onCambiar(e.target.value)}
+            onChange={(e) => commit(e.target.value)}
+            onKeyDown={alEnter((v) => commit(v))}
           />
+          {auto && <span className="param-auto">auto</span>}
         </span>
       );
+    }
     case "triestado":
     case "opciones":
     case "auto-entero":
@@ -112,6 +144,10 @@ export function Fila({ p, valor, onCambiar }: { p: ParamDef; valor: Valor; onCam
                   const n = Number(e.target.value);
                   if (e.target.value !== "" && Number.isFinite(n)) onCambiar(String(n));
                 }}
+                onKeyDown={alEnter((v) => {
+                  const n = Number(v);
+                  if (v !== "" && Number.isFinite(n)) onCambiar(String(n));
+                })}
               />
               <span className="param-unidad">{p.unidad}</span>
             </>
@@ -131,8 +167,9 @@ export function Fila({ p, valor, onCambiar }: { p: ParamDef; valor: Valor; onCam
                   checked={activo}
                   onChange={(e) => {
                     const actual = valor as string[];
+                    // al activar una columna queda siempre en primer lugar
                     const nuevo = e.target.checked
-                      ? [...actual, c.clave]
+                      ? [c.clave, ...actual.filter((x) => x !== c.clave)]
                       : actual.filter((x) => x !== c.clave);
                     onCambiar(nuevo);
                   }}
@@ -146,8 +183,15 @@ export function Fila({ p, valor, onCambiar }: { p: ParamDef; valor: Valor; onCam
   }
 }
 
-export default function MenuParametros({ valores, onCambiar, onRestablecer, onCerrar }: Props) {
+export default function MenuParametros({ valores, ventanaCalculada, onCambiar, onRestablecer, onCerrar }: Props) {
   const grupos = [...new Set(PARAMETROS.map((p) => p.grupo))];
+  // límites de la ventana deducidos de los datos (vacío = automático)
+  const fallbackDe = (clave: string): string | undefined => {
+    if (!ventanaCalculada) return undefined;
+    if (clave === "ventana-inicio") return ventanaCalculada.inicio;
+    if (clave === "ventana-fin") return ventanaCalculada.fin;
+    return undefined;
+  };
   return (
     <>
       <div className="menu-fondo" onClick={onCerrar} onContextMenu={(e) => e.preventDefault()} />
@@ -169,6 +213,7 @@ export default function MenuParametros({ valores, onCambiar, onRestablecer, onCe
                     <Fila
                       p={p}
                       valor={p.clave in valores ? valores[p.clave] : p.defecto}
+                      fallback={fallbackDe(p.clave)}
                       onCambiar={(v) => onCambiar(p.clave, v)}
                     />
                   </label>

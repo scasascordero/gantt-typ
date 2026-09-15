@@ -364,6 +364,22 @@
 ) = {
   let plano = aplanar(datos-crudos)
   let indice = construir-indice(plano)
+
+  // Referencias codigo→id (y id→id) para normalizar las `predecesoras`
+  // de salida: un token puede apuntar al código o al id de la tarea, y se
+  // lleva al id efectivo (el CPM interno sigue keyed por código).
+  let referencias = (:)
+  let codigo-de = (:)
+  for it in plano {
+    let idd = it.at("id", default: it.codigo)
+    referencias.insert(it.codigo, idd)
+    referencias.insert(idd, idd)
+    codigo-de.insert(idd, it.codigo)
+    codigo-de.insert(it.codigo, it.codigo)
+  }
+  let a-dep-id(d) = (..d, pred: referencias.at(d.pred, default: d.pred))
+  // variante para el CPM interno: sus mapas están keyed por `codigo`
+  let a-dep-codigo(d) = (..d, pred: codigo-de.at(d.pred, default: d.pred))
   let orden = orden-dfs(indice)
 
   let dia-proyecto = if inicio-proyecto != none { dia-ancla(inicio-proyecto) } else { none }
@@ -394,7 +410,7 @@
       hojas.push((
         codigo: it.codigo, dur: dur,
         es-ancla: es-ancla, ef-ancla: ef-ancla,
-        predecesoras: interpretar-predecesoras(it.at("predecesoras", default: none)),
+        predecesoras: interpretar-predecesoras(it.at("predecesoras", default: none)).map(a-dep-codigo),
       ))
     }
     let r = calcular-cpm(
@@ -423,6 +439,7 @@
     let hito = item.at("hito", default: false) == true or (r.duracion <= 1 and es-vacio(item.at("termino", default: none)) and es-vacio(item.at("duracion", default: none)) and not es-grupo)
     let base = (
       codigo: o.codigo,
+      id: item.at("id", default: o.codigo),
       nombre: item.at("nombre", default: ""),
       nivel: o.nivel,
       es-grupo: es-grupo,
@@ -455,7 +472,8 @@
           inicio-temprano-dias: cr.es, termino-temprano-dias: cr.ef,
           inicio-tardio-dias: cr.ls, termino-tardio-dias: cr.lf,
           holgura: cr.holgura, critico: cr.critico,
-          predecesoras: interpretar-predecesoras(item.at("predecesoras", default: none)),
+          predecesoras: interpretar-predecesoras(item.at("predecesoras", default: none))
+            .map(a-dep-id),
         )
       }
       (: ..base, ..extra)

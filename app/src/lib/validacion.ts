@@ -9,6 +9,9 @@ export interface Diagnostico {
   linea: number; // 1-based
   mensaje: string;
   severidad: "error" | "aviso";
+  // presente solo en el diagnóstico de id repetido: referencia a la tarea
+  // duplicada (la segunda ocurrencia) para que la app la renombre sola.
+  repetido?: { id: string; codigo: string };
 }
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -96,7 +99,12 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
       const id = datos.id;
       if (typeof id === "string" && id.trim()) {
         if (idsVistos.has(id)) {
-          d.push({ linea, mensaje: `El id '${id}' está repetido`, severidad: "error" });
+          d.push({
+            linea,
+            mensaje: `El id '${id}' está repetido`,
+            severidad: "error",
+            repetido: { id: id.trim(), codigo: clave },
+          });
         } else {
           idsVistos.set(id.trim(), clave);
         }
@@ -182,4 +190,28 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
   }
 
   return d.sort((a, b) => a.linea - b.linea);
+}
+
+// Devuelve un id `t<n>` que no colisiona con ningún id ni código existente.
+export function idLibre(texto: string): string {
+  const usados = new Set<string>();
+  try {
+    const doc = parseDocument(texto);
+    const rec = (seq: unknown): void => {
+      if (!isSeq(seq)) return;
+      for (const n of seq.items) {
+        if (!isMap(n)) continue;
+        const d = n.toJSON() as Record<string, unknown>;
+        if (typeof d.codigo === "string") usados.add(d.codigo);
+        if (typeof d.id === "string") usados.add(d.id);
+        rec(n.get("subtareas", true));
+      }
+    };
+    rec(doc.get("tareas", true));
+  } catch {
+    // sin documento parseable: se asumen inexistentes
+  }
+  let n = 1;
+  while (usados.has(`t${n}`)) n++;
+  return `t${n}`;
 }

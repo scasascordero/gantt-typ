@@ -748,30 +748,15 @@ body,
   text-align: left;
 }
 
-.menu-calendario-ventana {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 8px;
+.param-auto {
+  padding: 0 6px;
+  border-radius: 999px;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
-  font-size: 12px;
-  flex-wrap: wrap;
-}
-
-.menu-calendario-ventana-etiqueta {
   color: #1d4ed8;
+  font-size: 11px;
   font-weight: 600;
-}
-
-.menu-calendario-ventana-fecha {
-  color: #1e293b;
-  font-variant-numeric: tabular-nums;
-}
-
-.menu-calendario-ventana-flecha {
-  color: #64748b;
+  white-space: nowrap;
 }
 
 .menu-calendario-mas:hover,
@@ -791,6 +776,7 @@ body,
 }
 
 .menu-columna .param-checks {
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
@@ -1193,9 +1179,10 @@ body,
 }
 
 .param-checks {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 3px 12px;
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: end;
+  gap: 4px 16px;
   max-width: 320px;
 }
 

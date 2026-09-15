@@ -1,7 +1,7 @@
 // PropiedadesTarea.tsx — panel flotante que abre con clic derecho sobre una
 // fila de la carta: edita los campos de ESA actividad en el YAML.
 
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import type { ValorCampo } from "./lib/yamlEdicion";
 import "./App.css";
 
@@ -25,6 +25,16 @@ const numDe = (v: ValorCampo): number | undefined => {
   return Number.isFinite(n) ? n : undefined;
 };
 const boolDe = (v: ValorCampo): boolean => v === true || v === "true";
+
+// Enter en cualquier campo confirma el valor editado (aplica lo mismo que
+// su change/blur) en lugar de depender de cerrar la ventana.
+const alEnter =
+  (cometer: (v: string, e: KeyboardEvent<HTMLInputElement>) => void) =>
+  (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    cometer(e.currentTarget.value, e);
+  };
 
 function Fila({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
   return (
@@ -59,13 +69,33 @@ export default function PropiedadesTarea({ x, y, codigo, nombre, campos, onAplic
             type="text"
             defaultValue={textoDe(campos.nombre)}
             onBlur={(e) => e.target.value && onAplicar("nombre", e.target.value)}
+            onKeyDown={alEnter((v, e) => {
+              if (v) onAplicar("nombre", v);
+              e.currentTarget.blur();
+            })}
           />
         </Fila>
         <Fila etiqueta="Inicio">
-          <input type="date" defaultValue={textoDe(campos.inicio)} onChange={(e) => e.target.value && onAplicar("inicio", e.target.value)} />
+          <input
+            type="date"
+            defaultValue={textoDe(campos.inicio)}
+            onChange={(e) => e.target.value && onAplicar("inicio", e.target.value)}
+            onKeyDown={alEnter((v, e) => {
+              if (v) onAplicar("inicio", v);
+              e.currentTarget.blur();
+            })}
+          />
         </Fila>
         <Fila etiqueta="Término">
-          <input type="date" defaultValue={textoDe(campos.termino)} onChange={(e) => e.target.value && onAplicar("termino", e.target.value)} />
+          <input
+            type="date"
+            defaultValue={textoDe(campos.termino)}
+            onChange={(e) => e.target.value && onAplicar("termino", e.target.value)}
+            onKeyDown={alEnter((v, e) => {
+              if (v) onAplicar("termino", v);
+              e.currentTarget.blur();
+            })}
+          />
         </Fila>
         <Fila etiqueta="Duración (días)">
           <input
@@ -73,6 +103,10 @@ export default function PropiedadesTarea({ x, y, codigo, nombre, campos, onAplic
             min={0}
             defaultValue={numDe(campos.duracion) ?? ""}
             onChange={(e) => (e.target.value === "" ? onAplicar("duracion", null) : onAplicar("duracion", Number(e.target.value)))}
+            onKeyDown={alEnter((v, e) => {
+              onAplicar("duracion", v === "" ? null : Number(v));
+              e.currentTarget.blur();
+            })}
           />
         </Fila>
         <Fila etiqueta="Avance (%)">
@@ -82,6 +116,10 @@ export default function PropiedadesTarea({ x, y, codigo, nombre, campos, onAplic
             max={100}
             defaultValue={campos.avance !== null ? Math.round(Number(campos.avance) * 100) : ""}
             onChange={(e) => (e.target.value === "" ? onAplicar("avance", null) : onAplicar("avance", Number(e.target.value) / 100))}
+            onKeyDown={alEnter((v, e) => {
+              onAplicar("avance", v === "" ? null : Number(v) / 100);
+              e.currentTarget.blur();
+            })}
           />
         </Fila>
         <Fila etiqueta="Formato de barra">
@@ -133,10 +171,22 @@ export default function PropiedadesTarea({ x, y, codigo, nombre, campos, onAplic
             min={0}
             defaultValue={cantidad ?? ""}
             onChange={(e) => (e.target.value === "" ? onAplicar("cantidad", null) : onAplicar("cantidad", Number(e.target.value)))}
+            onKeyDown={alEnter((v, e) => {
+              onAplicar("cantidad", v === "" ? null : Number(v));
+              e.currentTarget.blur();
+            })}
           />
         </Fila>
         <Fila etiqueta="Unidad">
-          <input type="text" defaultValue={textoDe(campos.unidad)} onBlur={(e) => onAplicar("unidad", e.target.value === "" ? null : e.target.value)} />
+          <input
+            type="text"
+            defaultValue={textoDe(campos.unidad)}
+            onBlur={(e) => onAplicar("unidad", e.target.value === "" ? null : e.target.value)}
+            onKeyDown={alEnter((v, e) => {
+              onAplicar("unidad", v === "" ? null : v);
+              e.currentTarget.blur();
+            })}
+          />
         </Fila>
         <Fila etiqueta="Costo unitario">
           <input
@@ -145,6 +195,10 @@ export default function PropiedadesTarea({ x, y, codigo, nombre, campos, onAplic
             min={0}
             defaultValue={cu ?? ""}
             onChange={(e) => (e.target.value === "" ? onAplicar("costo-unitario", null) : onAplicar("costo-unitario", Number(e.target.value)))}
+            onKeyDown={alEnter((v, e) => {
+              onAplicar("costo-unitario", v === "" ? null : Number(v));
+              e.currentTarget.blur();
+            })}
           />
         </Fila>
         <Fila etiqueta="Costo">

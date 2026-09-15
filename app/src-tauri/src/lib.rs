@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Serialize;
@@ -15,6 +15,14 @@ use dominio::preparar::preparar_proyecto;
 struct ArchivoAbierto {
     ruta: String,
     contenido: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GttAbierto {
+    ruta: String,
+    nombre: String,
+    proyecto: ProyectoCompleto,
 }
 
 #[derive(Serialize)]
@@ -320,6 +328,135 @@ async fn cargar_proyecto(
     Ok(ProyectoCompleto { tareas, deps, params })
 }
 
+// --- Archivos .gtt (SQLite por proyecto, guardar/abrir desde cualquier ruta) --
+
+// Guarda el documento actual en un archivo `.gtt` (una base SQLite con un
+// solo proyecto). Si `ruta` viene, escribe ahí; si no, abre el diálogo.
+#[tauri::command]
+async fn guardar_gtt(
+    ruta: Option<String>,
+    tareas: Vec<db::TareaDb>,
+    deps: Vec<DepEntrada>,
+    params: Option<Vec<(String, String)>>,
+    nombre_sugerido: Option<String>,
+) -> Result<Option<String>, String> {
+    let ruta = match ruta {
+        Some(r) => PathBuf::from(r),
+        None => {
+            let nombre = nombre_sugerido.unwrap_or_else(|| "carta-gantt".to_string());
+            let elegido = tauri::async_runtime::spawn_blocking(move || {
+                rfd::FileDialog::new()
+                    .set_file_name(&format!("{nombre}.gtt"))
+                    .add_filter("Gantt", &["gtt"])
+                    .save_file()
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+            match elegido {
+                Some(r) => r,
+                None => return Ok(None),
+            }
+        }
+    };
+
+    let ruta_str = ruta.to_string_lossy().to_string();
+    let ruta_para_db = ruta_str.clone();
+    let nombre_archivo =
+        ruta.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "carta-gantt".to_string());
+
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        let mut conn = db::abrir(Path::new(&ruta_para_db))?;
+        // un .gtt = un solo proyecto; si el archivo ya existía, se reemplaza
+        conn.execute("DELETE FROM proyectos", []).map_err(|e| e.to_string())?;
+        let id = db::crear_proyecto(&conn, &nombre_archivo)?;
+        db::reemplazar_tareas(&mut conn, id, &tareas)?;
+        let deps_rust: Vec<(String, Dep)> = deps
+            .iter()
+            .map(|d| {
+                (
+                    d.tarea_codigo.clone(),
+                    Dep {
+                        pred: d.pred.clone(),
+                        tipo: TipoDep::parse(&d.tipo).map_err(|e| e.to_string()).unwrap_or(TipoDep::Fs),
+                        lag: d.lag,
+                    },
+                )
+            })
+            .collect();
+        db::reemplazar_dependencias(&mut conn, id, &deps_rust)?;
+        if let Some(params) = params {
+            for (clave, valor) in &params {
+                db::guardar_param(&conn, id, clave, valor)?;
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    Ok(Some(ruta_str))
+}
+
+// Abre un archivo `.gtt` por diálogo y devuelve su proyecto (la app lo
+// reconstruye a YAML con `proyectoAYaml`, que prefiere el param `contenido`).
+#[tauri::command]
+async fn cargar_gtt() -> Result<Option<GttAbierto>, String> {
+    let elegido = tauri::async_runtime::spawn_blocking(|| {
+        rfd::FileDialog::new()
+            .add_filter("Gantt", &["gtt"])
+            .pick_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let ruta = match elegido {
+        Some(r) => r,
+        None => return Ok(None),
+    };
+
+    let resultado = tauri::async_runtime::spawn_blocking(move || -> Result<GttAbierto, String> {
+        let conn = db::abrir(&ruta)?;
+        let proyectos = db::listar_proyectos(&conn).map_err(|e| e.to_string())?;
+        let (id, _nombre) = match proyectos.into_iter().next() {
+            Some(p) => p,
+            None => return Err("el archivo .gtt no contiene proyectos".to_string()),
+        };
+        let tareas = db::cargar_tareas(&conn, id)?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT tarea_codigo, pred_codigo, tipo, lag
+                 FROM dependencias WHERE proyecto_id = ?1 ORDER BY id",
+            )
+            .map_err(|e| e.to_string())?;
+        let filas = stmt
+            .query_map([id], |r| {
+                Ok(DepConTarea {
+                    tarea_codigo: r.get(0)?,
+                    pred: r.get(1)?,
+                    tipo: r.get(2)?,
+                    lag: r.get(3)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+        let mut deps = Vec::new();
+        for f in filas {
+            deps.push(f.map_err(|e| e.to_string())?);
+        }
+        let params = db::cargar_params(&conn, id)?;
+        Ok(GttAbierto {
+            ruta: ruta.to_string_lossy().to_string(),
+            nombre: ruta
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "carta-gantt".to_string()),
+            proyecto: ProyectoCompleto { tareas, deps, params },
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    Ok(Some(resultado))
+}
+
 // --- Exportadores en Rust ---------------------------------------------------
 
 // Exporta el plan a un documento de texto (mspdi | pmxml | xer): prepara las
@@ -543,6 +680,8 @@ pub fn run() {
             listar_proyectos,
             guardar_proyecto,
             cargar_proyecto,
+            guardar_gtt,
+            cargar_gtt,
             exportar_plan,
             filas_a_yaml,
             exportar_excel,

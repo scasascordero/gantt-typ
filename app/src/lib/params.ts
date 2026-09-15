@@ -318,6 +318,7 @@ export function generarMainTyp(valores: Record<string, Valor>): string {
 #let datos = yaml("datos.yaml")
 #carta-gantt(
   datos,
+  fechas-cpm: datos.at("fechas-cpm", default: none),
 ${lineas}
 )`;
 }

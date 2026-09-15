@@ -17,13 +17,13 @@
 // crudo de yaml() cuando el archivo tiene la forma { tareas: [...] } —
 // así funciona igual si el llamador usó leer-yaml() o el yaml() nativo
 // directamente.
-#let tareas-listas(tareas, cpm: false, inicio-proyecto: none, termino-proyecto: none) = {
+#let tareas-listas(tareas, cpm: false, inicio-proyecto: none, termino-proyecto: none, fechas-cpm: none) = {
   let tareas = if type(tareas) == dictionary { tareas.at("tareas", default: ()) } else { tareas }
   if tareas.len() == 0 { return () }
   if "inicio-dias" in tareas.at(0) {
     tareas
   } else {
-    preparar-tareas(tareas, cpm: cpm, inicio-proyecto: inicio-proyecto, termino-proyecto: termino-proyecto)
+    preparar-tareas(tareas, cpm: cpm, inicio-proyecto: inicio-proyecto, termino-proyecto: termino-proyecto, fechas-cpm: fechas-cpm)
   }
 }
 
@@ -190,7 +190,7 @@
   "mostrar-dia-inicio-semana", "mostrar-columnas", "mostrar-niveles",
   "mostrar-serie-avance", "mostrar-avance", "cpm", "inicio-proyecto",
   "termino-proyecto", "resaltar-critico", "color-critico",
-  "mostrar-dependencias", "color-dependencia", "esquema-vinculo",
+  "mostrar-dependencias", "color-dependencia", "fechas-cpm", "esquema-vinculo",
 )
 
 #let c-longitud(v) = {
@@ -336,10 +336,11 @@
   color-critico: rgb("#dc2626"),
   mostrar-dependencias: true, // true | false — dibuja flechas "elbow" entre predecesora y sucesora
   color-dependencia: rgb("#64748b"),
-  vinculos: none,            // none | dict codigo -> (archivo, linea) vía vinculos-desde-texto (o codigo -> URI ya armado); cada fila con ese codigo se vuelve clicable y abre su línea
+  fechas-cpm: none,            // none | dict codigo -> datos CPM precalculados (inyección desde petgraph)
+  vinculos: none,              // none | dict codigo -> (archivo, linea) vía vinculos-desde-texto (o codigo -> URI ya armado); cada fila con ese codigo se vuelve clicable y abre su línea
   esquema-vinculo: "vscodium", // "vscodium" | "vscode" — esquema del URI que arma carta-gantt a partir de las ubicaciones de `vinculos` (y el default de url-vscode) para abrir la línea en el editor
 ) = {
-  let filas = tareas-listas(tareas, cpm: cpm, inicio-proyecto: inicio-proyecto, termino-proyecto: termino-proyecto)
+  let filas = tareas-listas(tareas, cpm: cpm, inicio-proyecto: inicio-proyecto, termino-proyecto: termino-proyecto, fechas-cpm: fechas-cpm)
   assert(filas.len() > 0, message: "carta-gantt: no hay tareas para dibujar.")
 
   // Oculta por completo las subtareas de nivel >= mostrar-niveles (no solo
@@ -927,6 +928,7 @@ let oy = y-centro-de.at(dep.pred)
   color-critico: none,
   mostrar-dependencias: none,
   color-dependencia: none,
+  fechas-cpm: none,
   vinculos: none,
   esquema-vinculo: none,
 ) = {
@@ -979,6 +981,7 @@ let oy = y-centro-de.at(dep.pred)
     color-critico: v(color-critico, "color-critico", rgb("#dc2626"), c-color),
     mostrar-dependencias: v(mostrar-dependencias, "mostrar-dependencias", true, c-bool),
     color-dependencia: v(color-dependencia, "color-dependencia", rgb("#64748b"), c-color),
+    fechas-cpm: v(fechas-cpm, "fechas-cpm", none, x => x),
     vinculos: v(vinculos, "vinculos", none, x => x),
     esquema-vinculo: v(esquema-vinculo, "esquema-vinculo", "vscodium", x => x),
   )

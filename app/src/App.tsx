@@ -5,7 +5,7 @@ import { EditorView } from "@codemirror/view";
 import { yaml } from "@codemirror/lang-yaml";
 import { invoke } from "@tauri-apps/api/core";
 import ejemploDatos from "../../ejemplos/ejemplo_1.yaml?raw";
-import { compilarSvg, fuentesLibreria } from "./lib/libreria";
+import { compilarSvg, fuentesLibreria, necesitaCpm, inyectarFechasCpm } from "./lib/libreria";
 import { analizarSvg } from "./lib/geometria";
 import { listarTareas } from "./lib/yamlLineas";
 import { validarTexto, idLibre } from "./lib/validacion";
@@ -119,6 +119,57 @@ function App() {
   textoRef.current = texto;
   const idActivoRef = useRef(idActivo);
   idActivoRef.current = idActivo;
+  const mainTypRef = useRef(mainTyp);
+  mainTypRef.current = mainTyp;
+  const peticionRef = useRef(0);
+  const enVueloRef = useRef(false);
+  const pendienteRef = useRef(false);
+  const volverACompilar = useCallback(async () => {
+    const peticion = peticionRef.current;
+    const textoActual = textoRef.current;
+    const mainActual = mainTypRef.current;
+    // CPM activo (parámetro de la UI o config del YAML): precalcula las
+    // fechas con petgraph (preparar_filas) e inyecta `fechas-cpm` para que
+    // la librería no recalcule el CPM interno (cpm.typ). Si falla (datos
+    // inválidos) se compila con el YAML crudo y Typst reporta el error.
+    let textoParaTypst = textoActual;
+    const cpmActivo =
+      parametrosRef.current["cpm"] === true || necesitaCpm(textoActual);
+    if (cpmActivo) {
+      const fechaOpt = (k: string) => {
+        const v = parametrosRef.current[k];
+        return typeof v === "string" && v.trim() !== "" ? v : undefined;
+      };
+      try {
+        const filas = await invoke<Fila[]>("preparar_filas", {
+          texto: textoActual,
+          cpm: true,
+          inicioProyecto: fechaOpt("inicio-proyecto"),
+          terminoProyecto: fechaOpt("termino-proyecto"),
+        });
+        textoParaTypst = inyectarFechasCpm(textoActual, filas);
+      } catch {
+        // sin inyección: la carta se compila igual (error visible en pantalla)
+      }
+    }
+    const r = await compilarSvg(textoParaTypst, mainActual).catch((e) => ({
+      svg: null,
+      errores: [String(e)],
+      milis: 0,
+    }));
+    enVueloRef.current = false;
+    // descartar el resultado si llegó una edición más nueva mientras tanto
+    if (peticionRef.current === peticion && textoRef.current === textoActual) {
+      setSvg(r.svg);
+      setErrores(r.errores);
+      setMilis(r.milis);
+    }
+    // fusionar: si hubo cambios durante la compilación, se repite una vez más
+    if (pendienteRef.current) {
+      pendienteRef.current = false;
+      void volverACompilar();
+    }
+  }, []);
 
   const alCambiarTexto = useCallback((t: string) => {
     const id = idActivoRef.current;
@@ -163,20 +214,18 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Compila la carta en un Web Worker (hilo aparte). Las ediciones que
+  // llegan durante una compilación se fusionan en una sola repetición final:
+  // nunca hay una cola de resultados obsoletos aplicándose en orden.
   useEffect(() => {
-    let vivo = true;
-    const temporizador = window.setTimeout(async () => {
-      const r = await compilarSvg(texto, mainTyp);
-      if (!vivo) return;
-      setSvg(r.svg);
-      setErrores(r.errores);
-      setMilis(r.milis);
-    }, 350);
-    return () => {
-      vivo = false;
-      window.clearTimeout(temporizador);
-    };
-  }, [texto, mainTyp]);
+    peticionRef.current++;
+    if (!enVueloRef.current) {
+      enVueloRef.current = true;
+      void volverACompilar();
+    } else {
+      pendienteRef.current = true;
+    }
+  }, [texto, mainTyp, volverACompilar]);
 
   useEffect(() => {
     const caja = svgCaja.current;
@@ -732,8 +781,60 @@ function App() {
     [docActual, guardarEnProyecto],
   );
 
-  const cerrarDoc = useCallback(
-    (id: string) => {
+  // Archivos .gtt (una base SQLite por proyecto): guarda/abre el documento
+  // actual con round-trip fiel del YAML (se conserva como param `contenido`).
+  const guardarGtt = useCallback(
+    async (como: boolean) => {
+      const d = docActual;
+      if (!d) return;
+      try {
+        const p = yamlAProyecto(d.texto);
+        const yaEsGtt = d.ruta?.toLowerCase().endsWith(".gtt") ?? false;
+        const ruta = await invoke<string | null>("guardar_gtt", {
+          ruta: como || !yaEsGtt ? null : d.ruta,
+          tareas: p.tareas,
+          deps: p.deps,
+          params: p.params,
+          nombreSugerido: d.nombre.replace(/\.[^.]+$/, "") || "carta-gantt",
+        });
+        if (!ruta) return;
+        setDocs((prev) =>
+          prev.map((x) =>
+            x.id === d.id
+              ? { ...x, ruta, nombre: nombreDe(ruta), sucio: false, proyectoId: undefined }
+              : x,
+          ),
+        );
+        setMensaje(`Guardado .gtt: ${ruta}`);
+      } catch (err) {
+        setMensaje(`Error al guardar .gtt: ${String(err)}`);
+      }
+    },
+    [docActual],
+  );
+
+  const abrirGtt = useCallback(async () => {
+    try {
+      const r = await invoke<{ ruta: string; nombre: string; proyecto: ProyectoCompleto } | null>(
+        "cargar_gtt",
+      );
+      if (!r) return;
+      const textoNuevo = proyectoAYaml(r.proyecto);
+      const id = `doc-${Date.now()}`;
+      idActivoRef.current = id;
+      setDocs((prev) => [
+        ...prev,
+        { id, nombre: nombreDe(r.ruta), ruta: r.ruta, texto: textoNuevo, sucio: false },
+      ]);
+      setIdActivo(id);
+      ponerEnEditor(textoNuevo);
+      setMensaje(`Abierto .gtt: ${r.ruta}`);
+    } catch (err) {
+      setMensaje(`Error al abrir .gtt: ${String(err)}`);
+    }
+  }, [ponerEnEditor]);
+
+  const cerrarDoc = useCallback((id: string) => {
       const d = docs.find((x) => x.id === id);
       if (!d) return;
       if (d.sucio && !window.confirm(`"${d.nombre}" tiene cambios sin guardar. ¿Cerrar igualmente?`)) {
@@ -1151,6 +1252,9 @@ function App() {
           <button onClick={() => void abrirArchivo()} title="Abrir archivo…">
             Abrir…
           </button>
+          <button onClick={() => void abrirGtt()} title="Abrir un archivo .gtt (proyecto SQLite)">
+            Abrir .gtt…
+          </button>
           <div className="import-menu">
             <button
               className="import-toggle"
@@ -1190,6 +1294,12 @@ function App() {
             title={hayErroresValidacion ? "Corrige los errores de validación antes de guardar" : "Guardar como…"}
           >
             Guardar como…
+          </button>
+          <button
+            onClick={() => void guardarGtt(false)}
+            title="Guardar el documento en un archivo .gtt (un proyecto por archivo). Si el archivo ya es .gtt, guarda en el mismo"
+          >
+            Guardar .gtt
           </button>
           <button
             onClick={() => setEditorOculto((o) => !o)}

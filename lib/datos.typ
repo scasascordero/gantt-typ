@@ -356,11 +356,16 @@
 //   holgura, critico, predecesoras (para dibujar flechas)
 // `inicio-proyecto`/`termino-proyecto` fijan el arranque/cierre del proyecto
 // cuando no salen solos de los datos (ver cpm.typ).
+// Con `fechas-cpm` (dict codigo -> {es, ef, ls, lf, holgura, critico,
+// inicio-dias, termino-dias, duracion, predecesoras}) se inyectan resultados
+// CPM precalculados (p. ej. por petgraph en Rust) y se omite el cálculo
+// interno: `cpm: true` se ignora si `fechas-cpm` viene con datos.
 #let preparar-tareas(
   datos-crudos,
   cpm: false,
   inicio-proyecto: none,
   termino-proyecto: none,
+  fechas-cpm: none,
 ) = {
   let plano = aplanar(datos-crudos)
   let indice = construir-indice(plano)
@@ -392,7 +397,27 @@
   let res-cpm = none
   let fechas-de = none
   let critico-de = none
-  if cpm {
+  let cpm-externo = fechas-cpm != none
+  if cpm-externo {
+    // Resultados CPM precalculados (inyectados desde petgraph/Rust):
+    // fechas-cpm es un dict codigo -> {es, ef, ls, lf, holgura, critico,
+    //   inicio-dias, termino-dias, duracion, predecesoras}.
+    let fech = (:)
+    let ck = (:)
+    let r = (:)
+    for (code, data) in fechas-cpm {
+      fech.insert(code, (
+        inicio-dias: data.at("inicio-dias"),
+        termino-dias: data.at("termino-dias"),
+        duracion: data.at("duracion"),
+      ))
+      ck.insert(code, data.at("critico"))
+      r.insert(code, data)
+    }
+    fechas-de = fech
+    critico-de = ck
+    res-cpm = r
+  } else if cpm {
     let hojas = ()
     for it in plano {
       if not es-hoja(it.codigo) { continue }
@@ -462,18 +487,26 @@
       costo-unitario: r.costo-unitario,
       costo: r.costo,
     )
-    if not cpm { base }
+    if res-cpm == none { base }
     else {
       let extra = if es-grupo {
         (holgura: none, critico: marcar-critico(indice, o.codigo, critico-de), predecesoras: ())
       } else {
         let cr = res-cpm.at(o.codigo)
+        let predecesoras-finales = if cpm-externo {
+          cr.at("predecesoras", default: ())
+        } else {
+          interpretar-predecesoras(item.at("predecesoras", default: none))
+            .map(a-dep-id)
+        }
         (
-          inicio-temprano-dias: cr.es, termino-temprano-dias: cr.ef,
-          inicio-tardio-dias: cr.ls, termino-tardio-dias: cr.lf,
-          holgura: cr.holgura, critico: cr.critico,
-          predecesoras: interpretar-predecesoras(item.at("predecesoras", default: none))
-            .map(a-dep-id),
+          inicio-temprano-dias: cr.at("es", default: cr.at("inicio-temprano-dias", default: 0)),
+          termino-temprano-dias: cr.at("ef", default: cr.at("termino-temprano-dias", default: 0)),
+          inicio-tardio-dias: cr.at("ls", default: cr.at("inicio-tardio-dias", default: 0)),
+          termino-tardio-dias: cr.at("lf", default: cr.at("termino-tardio-dias", default: 0)),
+          holgura: cr.at("holgura", default: 0),
+          critico: cr.at("critico", default: false),
+          predecesoras: predecesoras-finales,
         )
       }
       (: ..base, ..extra)

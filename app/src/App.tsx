@@ -455,39 +455,56 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diagnosticos]);
 
-  // Fechas resueltas con la misma lógica que la librería (port de cpm.typ),
-  // para mostrar el "término" calculado de cada actividad en el panel.
-  const terminoCalculado = useMemo(() => {
-    const m = new Map<string, string>();
-    try {
-      for (const f of prepararProyecto(texto, { cpm: cpmActivado })) {
-        m.set(f.codigo, fechaIso(f.terminoDias));
+  // Fechas resueltas por el motor (petgraph en Rust, la misma fuente que la
+  // carta): alimenta el "término" calculado de cada actividad y los límites
+  // de la ventana temporal. Con datos inválidos queda en null (panel en
+  // blanco, como con el port TS).
+  const [filasPanel, setFilasPanel] = useState<Fila[] | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    const id = window.setTimeout(async () => {
+      try {
+        const fechaOpt = (k: string) => {
+          const v = parametrosRef.current[k];
+          return typeof v === "string" && v.trim() !== "" ? v : undefined;
+        };
+        const filas = await invoke<Fila[]>("preparar_filas", {
+          texto: textoRef.current,
+          cpm: cpmActivado || necesitaCpm(textoRef.current),
+          inicioProyecto: fechaOpt("inicio-proyecto"),
+          terminoProyecto: fechaOpt("termino-proyecto"),
+        });
+        if (vivo) setFilasPanel(filas);
+      } catch {
+        if (vivo) setFilasPanel(null);
       }
-    } catch {
-      // texto inválido o sin "tareas": se queda vacío
-    }
-    return m;
+    }, 250);
+    return () => {
+      vivo = false;
+      window.clearTimeout(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [texto, cpmActivado]);
 
-  // Límites de la ventana temporal deducidos de los datos (cuando
-  // ventana-inicio/fin están vacíos la librería usa el mínimo/máximo real).
+  const terminoCalculado = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const f of filasPanel ?? []) m.set(f.codigo, fechaIso(f.terminoDias));
+    return m;
+  }, [filasPanel]);
+
   const ventanaCalculada = useMemo(() => {
-    try {
-      const filas = prepararProyecto(texto, { cpm: cpmActivado });
-      if (!filas.length) return null;
-      let min = Infinity;
-      let max = -Infinity;
-      for (const f of filas) {
-        if (f.inicioDias < min) min = f.inicioDias;
-        if (f.terminoDias > max) max = f.terminoDias;
-      }
-      return Number.isFinite(min) && Number.isFinite(max)
-        ? { inicio: fechaIso(min), fin: fechaIso(max) }
-        : null;
-    } catch {
-      return null;
+    const filas = filasPanel;
+    if (!filas || !filas.length) return null;
+    let min = Infinity;
+    let max = -Infinity;
+    for (const f of filas) {
+      if (f.inicioDias < min) min = f.inicioDias;
+      if (f.terminoDias > max) max = f.terminoDias;
     }
-  }, [texto, cpmActivado]);
+    return Number.isFinite(min) && Number.isFinite(max)
+      ? { inicio: fechaIso(min), fin: fechaIso(max) }
+      : null;
+  }, [filasPanel]);
 
   const CAMPOS_TAREA = [
     "nombre", "inicio", "termino", "duracion", "avance", "formato-barra",

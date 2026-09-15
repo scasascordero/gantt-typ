@@ -12,6 +12,20 @@ export default defineConfig(() => ({
   //
   // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
+  // 4. separar librerías pesadas (React y CodeMirror) en chunks propios para
+  //    que ninguna entrada supere el umbral de 500 kB
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: "react", test: /node_modules[\\/](react|react-dom|scheduler|react-is)[\\/]/ },
+            { name: "editor", test: /node_modules[\\/](?:codemirror|@codemirror|@lezer)[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 1420,

@@ -132,8 +132,9 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
 
       const sub = nodo.get("subtareas", true);
       const tieneSub = isSeq(sub) && sub.items.length > 0;
-      // con `ocultar-subtareas: true` la librería trata la tarea como hoja
-      const esHoja = !tieneSub || datos["ocultar-subtareas"] === true;
+      // hoja = sin hijos (misma semántica que la librería y el motor Rust):
+      // ocultar-subtareas solo afecta el dibujo, no la estructura del árbol.
+      const esHoja = !tieneSub;
       items.push({
         codigo: clave,
         nombre: typeof datos.nombre === "string" ? datos.nombre : clave,
@@ -142,7 +143,6 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
         tieneInicio: typeof inicio === "string" && RE_FECHA.test(inicio.trim()),
         pred: tokensDePredecesoras(datos.predecesoras),
       });
-      if (datos["ocultar-subtareas"] === true) continue;
       caminar(sub, _nivel + 1);
     }
   };

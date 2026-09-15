@@ -7,6 +7,7 @@ use tauri::Manager;
 
 use dominio::db;
 use dominio::exportar;
+use dominio::importar;
 use dominio::modelo::{Dep, Fila, OpcionesCpm, TipoDep};
 use dominio::preparar::preparar_proyecto;
 
@@ -408,6 +409,87 @@ async fn exportar_excel(
     Ok(ruta.to_string_lossy().to_string())
 }
 
+// --- Importadores en Rust ----------------------------------------------------
+
+// Convierte un archivo de texto importado a YAML de la librería. Los
+// formatos de texto son pmxml y xer; excel y mspdi van por otros comandos.
+#[tauri::command]
+async fn importar_plan(texto: String, formato: String) -> Result<String, String> {
+    match formato.as_str() {
+        "pmxml" => importar::desde_pmxml(&texto),
+        "xer" => importar::desde_xer(&texto),
+        _ => Err(format!("formato de importación inválido: '{formato}'")),
+    }
+}
+
+// Diálogo para elegir el archivo a importar. Devuelve ruta + contenido para
+// los formatos de texto; para excel solo interesa la ruta (el contenido es
+// binario y se lee por los comandos excel_*).
+#[tauri::command]
+async fn elegir_archivo_importar(formato: String) -> Result<Option<ArchivoAbierto>, String> {
+    let formato_dialogo = formato.clone();
+    let elegido = tauri::async_runtime::spawn_blocking(move || {
+        let mut dialogo = rfd::FileDialog::new();
+        match formato_dialogo.as_str() {
+            "excel" => {
+                dialogo = dialogo.add_filter("Excel", &["xlsx"]).add_filter("Todos", &["*"]);
+            }
+            "pmxml" | "mspdi" => {
+                dialogo = dialogo.add_filter("XML", &["xml"]).add_filter("Todos", &["*"]);
+            }
+            "xer" => {
+                dialogo = dialogo.add_filter("XER", &["xer"]).add_filter("Todos", &["*"]);
+            }
+            _ => {
+                dialogo = dialogo.add_filter("Todos", &["*"]);
+            }
+        }
+        dialogo.pick_file()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let ruta = match elegido {
+        Some(r) => r,
+        None => return Ok(None),
+    };
+    let contenido = if formato == "excel" {
+        String::new()
+    } else {
+        std::fs::read_to_string(&ruta)
+            .map_err(|e| format!("no se pudo leer '{}': {e}", ruta.display()))?
+    };
+    Ok(Some(ArchivoAbierto {
+        ruta: ruta.to_string_lossy().to_string(),
+        contenido,
+    }))
+}
+
+// Info del libro Excel: hojas + rangos con nombre (definidos en cualquier
+// hoja), con su ref A1.
+#[tauri::command]
+async fn listar_rangos_excel(ruta: String) -> Result<importar::ExcelInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || importar::excel_info(&ruta))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+// Celdas del libro Excel: recorta la matriz al rectángulo del rango con
+// nombre si `rango` trae su ref A1; si no, lee la hoja completa.
+#[tauri::command]
+async fn leer_excel_celdas(
+    ruta: String,
+    hoja: Option<String>,
+    rango: Option<String>,
+) -> Result<Vec<Vec<Option<importar::CeldaExcel>>>, String> {
+    let hoja = hoja.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || {
+        importar::leer_excel_celdas(&ruta, &hoja, rango.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 // Primer nombre razonable para el proyecto exportado: el campo 'nombre' de
 // la raíz, el primer título de nivel 0 o un nombre genérico.
 fn extraer_nombre(texto: &str) -> Option<String> {
@@ -463,7 +545,11 @@ pub fn run() {
             cargar_proyecto,
             exportar_plan,
             filas_a_yaml,
-            exportar_excel
+            exportar_excel,
+            importar_plan,
+            elegir_archivo_importar,
+            listar_rangos_excel,
+            leer_excel_celdas
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

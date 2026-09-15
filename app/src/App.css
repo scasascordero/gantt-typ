@@ -132,6 +132,136 @@ body,
   background: #eff6ff;
 }
 
+.import-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.import-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.import-flecha {
+  font-size: 0.7em;
+  opacity: 0.8;
+}
+
+.import-lista {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 110px;
+  padding: 4px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(15 23 42 / 0.18);
+}
+
+.import-lista button {
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+}
+
+.import-lista button:hover:not(:disabled) {
+  background: #eff6ff;
+}
+
+.popup-excel {
+  position: fixed;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 320px;
+  max-width: 480px;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgb(15 23 42 / 0.25);
+}
+
+.popup-excel-titulo {
+  margin: 0;
+  font-size: 15px;
+}
+
+.popup-excel-ayuda {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+}
+
+.popup-excel-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.popup-excel-lista button {
+  text-align: left;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 7px;
+}
+
+.popup-excel-lista button:hover {
+  background: #eff6ff;
+}
+
+.popup-excel-refe {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.popup-excel-campo {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.popup-excel-campo select {
+  padding: 5px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.popup-excel-botones {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.popup-excel-botones .secundario,
+.popup-excel > .secundario {
+  color: #475569;
+  background: #f1f5f9;
+}
+
 .popup-fecha {
   position: fixed;
   z-index: 50;

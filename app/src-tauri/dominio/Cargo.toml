@@ -13,3 +13,4 @@ petgraph = "0.6"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 thiserror = "2"
 rust_xlsxwriter = "0.99"
+calamine = { version = "0.36", features = ["chrono"] }

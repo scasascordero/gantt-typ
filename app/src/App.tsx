@@ -12,6 +12,7 @@ import { generarMainTyp, valoresDefault, type Valor } from "./lib/params";
 import { prepararProyecto, type Fila } from "./lib/proyecto";
 import { aMSPDI, aPMXML, aXER } from "./lib/exportadores";
 import { desdeMSPDI, esMSPDI } from "./lib/mspdi";
+import { excelAYaml, detectarColumnas, type ColumnasExcel, type Deteccion, type MatrizExcel } from "./lib/excelImport";
 import { editarCampo, leerCampo, leerConfigYaml, type ValorCampo } from "./lib/yamlEdicion";
 import { proyectoAYaml, yamlAProyecto, type ProyectoCompleto } from "./lib/proyectoDb";
 import MenuParametros from "./MenuParametros";
@@ -48,6 +49,12 @@ interface PopupFecha {
   valor: string;
 }
 
+interface ExcelInfo {
+  hojaSugerida: string;
+  hojas: string[];
+  rangos: { nombre: string; refe: string }[];
+}
+
 function App() {
   const [docs, setDocs] = useState<Doc[]>(() => [
     { id: "doc-1", nombre: "ejemplo_1.yaml", texto: ejemploDatos, sucio: false },
@@ -69,6 +76,15 @@ function App() {
   const [proyectos, setProyectos] = useState<ProyectoInfo[]>([]);
   const [popupFecha, setPopupFecha] = useState<PopupFecha | null>(null);
   const [exportMenuAbierto, setExportMenuAbierto] = useState(false);
+  const [importMenuAbierto, setImportMenuAbierto] = useState(false);
+  const [excelRangos, setExcelRangos] = useState<{ ruta: string; info: ExcelInfo } | null>(null);
+  const [excelMapa, setExcelMapa] = useState<{
+    ruta: string;
+    matriz: MatrizExcel;
+    det: Deteccion;
+    hoja: string;
+  } | null>(null);
+  const [mapaSel, setMapaSel] = useState<ColumnasExcel | null>(null);
   const [propsTarea, setPropsTarea] = useState<{ x: number; y: number; codigo: string } | null>(null);
   const inputFecha = useRef<HTMLInputElement | null>(null);
 
@@ -345,33 +361,86 @@ function App() {
     }
   }, [ponerEnEditor]);
 
-  const importarMspdi = useCallback(async () => {
+  const abrirDocImportado = (textoYaml: string, rutaSrc: string, origen: string) => {
+    const id = `doc-${Date.now()}`;
+    const nombre = nombreDe(rutaSrc).replace(/\.[^.]+$/, "") + ".yaml";
+    idActivoRef.current = id;
+    setDocs((prev) => [...prev, { id, nombre, texto: textoYaml, sucio: true }]);
+    setIdActivo(id);
+    ponerEnEditor(textoYaml);
+    setMensaje(
+      `${origen} importado desde ${nombreDe(rutaSrc)} (${listarTareas(textoYaml).length} tareas)`,
+    );
+  };
+
+  // Importadores de texto: MSPDI (TS, como antes), PMXML y XER (Rust).
+  const importarTexto = async (formato: "mspdi" | "pmxml" | "xer") => {
     try {
-      const r = await invoke<{ ruta: string; contenido: string } | null>("abrir_archivo");
+      const r = await invoke<{ ruta: string; contenido: string } | null>("elegir_archivo_importar", {
+        formato,
+      });
       if (!r) return;
-      if (!esMSPDI(r.contenido)) {
-        setMensaje("El archivo no parece MSPDI (MS Project 2003 XML)");
-        return;
+      let yamlTexto: string;
+      if (formato === "mspdi") {
+        if (!esMSPDI(r.contenido)) {
+          setMensaje("El archivo no parece MSPDI (MS Project 2003 XML)");
+          return;
+        }
+        yamlTexto = desdeMSPDI(r.contenido);
+      } else {
+        yamlTexto = await invoke<string>("importar_plan", { texto: r.contenido, formato });
       }
-      const yamlTexto = desdeMSPDI(r.contenido);
-      const id = `doc-${Date.now()}`;
-      idActivoRef.current = id;
-      setDocs((prev) => [
-        ...prev,
-        {
-          id,
-          nombre: nombreDe(r.ruta).replace(/\.xml$/i, "") + ".yaml",
-          texto: yamlTexto,
-          sucio: true,
-        },
-      ]);
-      setIdActivo(id);
-      ponerEnEditor(yamlTexto);
-      setMensaje(`MSPDI importado desde ${nombreDe(r.ruta)} (${listarTareas(yamlTexto).length} tareas)`);
+      abrirDocImportado(yamlTexto, r.ruta, formato.toUpperCase());
     } catch (err) {
       setMensaje(`Error al importar: ${String(err)}`);
     }
-  }, [ponerEnEditor]);
+  };
+
+  // Importación de Excel: elige archivo, pregunta por un rango con nombre y,
+  // si la detección automática tiene dudas, abre el diálogo de mapeo.
+  const importarExcel = async () => {
+    try {
+      const r = await invoke<{ ruta: string; contenido: string } | null>("elegir_archivo_importar", {
+        formato: "excel",
+      });
+      if (!r) return;
+      const info = await invoke<ExcelInfo>("listar_rangos_excel", { ruta: r.ruta });
+      setExcelRangos({ ruta: r.ruta, info });
+    } catch (err) {
+      setMensaje(`Error al importar Excel: ${String(err)}`);
+    }
+  };
+
+  const usarRangoExcel = async (refe: string | null) => {
+    const actual = excelRangos;
+    if (!actual) return;
+    setExcelRangos(null);
+    try {
+      const hoja = actual.info.hojaSugerida;
+      const matriz = await invoke<MatrizExcel>("leer_excel_celdas", {
+        ruta: actual.ruta,
+        hoja,
+        rango: refe,
+      });
+      const det = detectarColumnas(matriz);
+      if (det.dudas.length === 0) {
+        abrirDocImportado(excelAYaml(matriz, det, det.columnas), actual.ruta, "Excel");
+      } else {
+        setExcelMapa({ ruta: actual.ruta, matriz, det, hoja });
+        setMapaSel(det.columnas);
+      }
+    } catch (err) {
+      setMensaje(`Error al leer Excel: ${String(err)}`);
+    }
+  };
+
+  const confirmarMapa = () => {
+    if (!excelMapa || !mapaSel) return;
+    const yamlTexto = excelAYaml(excelMapa.matriz, excelMapa.det, mapaSel);
+    abrirDocImportado(yamlTexto, excelMapa.ruta, "Excel");
+    setExcelMapa(null);
+    setMapaSel(null);
+  };
 
   // --- CRUD de proyectos (SQLite, sin pasar por archivos) -------------------
 
@@ -626,6 +695,26 @@ function App() {
     };
   }, [exportMenuAbierto]);
 
+  // cierra el menú desplegable de importación al hacer click o tecla afuera
+  useEffect(() => {
+    if (!importMenuAbierto) return;
+    const cerrar = (ev: Event) => {
+      if (ev instanceof KeyboardEvent) {
+        if (ev.key === "Escape") setImportMenuAbierto(false);
+        return;
+      }
+      const el = ev.target as Element | null;
+      if (el?.closest?.(".import-menu")) return;
+      setImportMenuAbierto(false);
+    };
+    window.addEventListener("mousedown", cerrar);
+    window.addEventListener("keydown", cerrar);
+    return () => {
+      window.removeEventListener("mousedown", cerrar);
+      window.removeEventListener("keydown", cerrar);
+    };
+  }, [importMenuAbierto]);
+
   // todas las exportaciones abren "Guardar como" con nombre propuesto
   // AAAA-MM-DD_<documento>.<ext> (editable, para no pisar archivos) y como
   // carpeta inicial la del .yaml fuente si el documento ya está guardado
@@ -871,9 +960,32 @@ function App() {
           <button onClick={() => void abrirArchivo()} title="Abrir archivo…">
             Abrir…
           </button>
-          <button onClick={() => void importarMspdi()} title="Importar MSPDI (MS Project 2003 XML)">
-            Importar MSPDI
-          </button>
+          <div className="import-menu">
+            <button
+              className="import-toggle"
+              onClick={() => setImportMenuAbierto((o) => !o)}
+              title="Importar un plan desde otro formato"
+            >
+              Importar…
+              <span className="import-flecha">{importMenuAbierto ? "▲" : "▼"}</span>
+            </button>
+            {importMenuAbierto && (
+              <div className="import-lista">
+                {(["mspdi", "pmxml", "xer", "excel"] as const).map((fmt) => (
+                  <button
+                    key={fmt}
+                    onClick={() => {
+                      setImportMenuAbierto(false);
+                      if (fmt === "excel") void importarExcel();
+                      else void importarTexto(fmt);
+                    }}
+                  >
+                    {fmt === "mspdi" ? "MSPDI" : fmt === "excel" ? "Excel" : fmt.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button onClick={() => guardarDoc(false)} title="Guardar (Ctrl+S)">
             Guardar
           </button>
@@ -1015,6 +1127,65 @@ function App() {
             }}
           />
           <span className="popup-fecha-ayuda">Enter aplica · Esc cierra</span>
+        </div>
+      )}
+      {excelRangos && (
+        <div className="popup-excel">
+          <h3 className="popup-excel-titulo">Importar {nombreDe(excelRangos.ruta)}</h3>
+          {excelRangos.info.rangos.length === 0 ? (
+            <p className="popup-excel-ayuda">El libro no tiene rangos con nombre.</p>
+          ) : (
+            <div className="popup-excel-lista">
+              {excelRangos.info.rangos.map((r) => (
+                <button key={r.nombre} onClick={() => void usarRangoExcel(r.refe)}>
+                  {r.nombre}
+                  <span className="popup-excel-refe">{r.refe}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button onClick={() => void usarRangoExcel(null)}>
+            Toda la hoja ({excelRangos.info.hojaSugerida})
+          </button>
+          <button className="secundario" onClick={() => setExcelRangos(null)}>
+            Cancelar
+          </button>
+        </div>
+      )}
+      {excelMapa && mapaSel && (
+        <div className="popup-excel">
+          <h3 className="popup-excel-titulo">Mapear columnas de {nombreDe(excelMapa.ruta)}</h3>
+          <p className="popup-excel-ayuda">
+            Faltó reconocer: {excelMapa.det.dudas.join(", ")}. Ajusta las columnas o deja "—" para
+            omitir un campo.
+          </p>
+          {(Object.keys(mapaSel) as (keyof ColumnasExcel)[]).map((campo) => (
+            <label key={campo} className="popup-excel-campo">
+              <span>{campo}</span>
+              <select
+                value={mapaSel[campo] ?? ""}
+                onChange={(ev) =>
+                  setMapaSel({
+                    ...mapaSel,
+                    [campo]: ev.currentTarget.value === "" ? null : Number(ev.currentTarget.value),
+                  })
+                }
+              >
+                <option value="">—</option>
+                {excelMapa.det.encabezados.map((h, j) => (
+                  <option key={j} value={j}>
+                    {j + 1}. {h}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+          <div className="popup-excel-botones">
+            <button onClick={confirmarMapa}>Importar</button>
+            <button className="secundario" onClick={() => setExcelMapa(null)}>
+              Cancelar
+            </button>
+          </div>
         </div>
       )}
       {propsTarea && camposTarea && (

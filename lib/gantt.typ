@@ -778,8 +778,9 @@
           let y-centro-de = (:)
           let fila-de = (:)
           for (i, g) in filas.enumerate() {
-            y-centro-de.insert(g.codigo, y0 + i * alto-fila + alto-fila / 2)
-            fila-de.insert(g.codigo, g)
+let clave = g.at("id", default: g.codigo)
+            y-centro-de.insert(clave, y0 + i * alto-fila + alto-fila / 2)
+            fila-de.insert(clave, g)
           }
           let trazo-dep = 0.5pt + color-dependencia
           let p = 2.4pt
@@ -788,9 +789,9 @@
               let pg = fila-de.at(dep.pred, default: none)
               if pg == none { continue }
               let ox = if pg.hito { x-de(pg.inicio-dias) } else { x-de(pg.termino-dias + 1) }
-              let oy = y-centro-de.at(dep.pred)
+let oy = y-centro-de.at(dep.pred)
               let sx = x-de(g.inicio-dias)
-              let sy = y-centro-de.at(g.codigo)
+              let sy = y-centro-de.at(g.at("id", default: g.codigo))
               if ox < ancho-tabla or ox > ancho-total or sx < ancho-tabla or sx > ancho-total {
                 continue
               }

@@ -1204,7 +1204,7 @@ function App() {
         <section className="panel-editor" onContextMenu={alClicDerechoEditor}>
           <div className="editor-cab">
             <span className="editor-estado">
-              <span className={`editor-ateralita${editorEditable ? " activo" : ""}`}>
+              <span className={`editor-etiqueta${editorEditable ? " activo" : ""}`}>
                 {editorEditable ? "editable" : "solo lectura"}
               </span>
             </span>

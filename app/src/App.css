@@ -506,7 +506,7 @@ body,
   color: #64748b;
 }
 
-.editor-ateralita {
+.editor-etiqueta {
   padding: 1px 7px;
   border-radius: 999px;
   border: 1px solid #cbd5e1;
@@ -515,7 +515,7 @@ body,
   background: #ffffff;
 }
 
-.editor-ateralita.activo {
+.editor-etiqueta.activo {
   background: #fff7ed;
   border-color: #fdba74;
   color: #9a3412;

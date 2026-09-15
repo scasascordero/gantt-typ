@@ -140,8 +140,28 @@ function renumerar(doc: Document): void {
   descender(r, 0, []);
 }
 
-function plantilla(doc: Document): YAMLMap {
-  return doc.createNode({ nombre: "Nueva tarea" }) as YAMLMap;
+const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
+function fechaHoy(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Busca el primer `inicio` válido en la cadena de ancestros (el inicial de
+// la hoja que se usó como referencia) y si ninguno existe, la fecha de hoy:
+// la librería exige `inicio` en toda tarea hoja.
+function fechaInicio(doc: Document, fila: Fila | null): string {
+  let actual: Fila | undefined = fila ?? undefined;
+  const filas = actual ? filasDe(doc) : [];
+  while (actual) {
+    const v = actual.nodo.get("inicio");
+    if (typeof v === "string" && RE_FECHA.test(v)) return v;
+    actual = filas.find((f) => f.nodo === actual?.padre);
+  }
+  return fechaHoy();
+}
+
+function plantilla(doc: Document, inicio: string): YAMLMap {
+  return doc.createNode({ nombre: "Nueva tarea", inicio }) as YAMLMap;
 }
 
 function subtareas(n: YAMLMap, doc: Document): YAMLSeq {
@@ -217,8 +237,8 @@ export function borrarTarea(texto: string, ref: string): string {
 
 export function anadirHermana(texto: string, ref: string | null): string {
   return operar(texto, (doc) => {
-    const nueva = plantilla(doc);
     const fila = ref ? localizar(doc, ref) : undefined;
+    const nueva = plantilla(doc, fechaInicio(doc, fila ?? null));
     if (fila) {
       const i = fila.secuencia.items.indexOf(fila.nodo);
       fila.secuencia.items.splice(i + 1, 0, nueva);
@@ -235,7 +255,7 @@ export function anadirSubtarea(texto: string, ref: string): string {
   return operar(texto, (doc) => {
     const fila = localizar(doc, ref);
     if (!fila) return false;
-    subtareas(fila.nodo, doc).items.push(plantilla(doc));
+    subtareas(fila.nodo, doc).items.push(plantilla(doc, fechaInicio(doc, fila)));
     return true;
   });
 }

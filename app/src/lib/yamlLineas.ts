@@ -5,6 +5,20 @@ export interface Tarea {
   nombre: string;
   linea: number;
   nivel: number;
+  predecesoras: string[];
+}
+
+function tokensDePredecesoras(valor: unknown): string[] {
+  if (typeof valor === "string") {
+    return valor
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  if (Array.isArray(valor)) {
+    return valor.map((x) => String(x)).filter(Boolean);
+  }
+  return [];
 }
 
 export function listarTareas(texto: string): Tarea[] {
@@ -25,6 +39,7 @@ export function listarTareas(texto: string): Tarea[] {
           nombre: typeof nombre === "string" ? nombre : String(codigo),
           linea,
           nivel,
+          predecesoras: tokensDePredecesoras(nodo.get("predecesoras")),
         });
       }
       // con `ocultar-subtareas: true` la librería no dibuja el subárbol:

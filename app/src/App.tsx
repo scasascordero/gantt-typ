@@ -9,11 +9,13 @@ import { compilarSvg, fuentesLibreria } from "./lib/libreria";
 import { analizarSvg } from "./lib/geometria";
 import { listarTareas } from "./lib/yamlLineas";
 import { generarMainTyp, valoresDefault, type Valor } from "./lib/params";
-import { prepararProyecto, type Fila } from "./lib/proyecto";
+import { prepararProyecto, fechaIso, type Fila } from "./lib/proyecto";
 import { aMSPDI, aPMXML, aXER } from "./lib/exportadores";
 import { desdeMSPDI, esMSPDI } from "./lib/mspdi";
 import { excelAYaml, detectarColumnas, type ColumnasExcel, type Deteccion, type MatrizExcel } from "./lib/excelImport";
 import { editarCampo, leerCampo, leerConfigYaml, type ValorCampo } from "./lib/yamlEdicion";
+import { editarPredecesoras } from "./lib/yamlOperaciones";
+import EditorPredecesoras from "./EditorPredecesoras";
 import MenuCalendario from "./MenuCalendario";
 import MenuColumnas from "./MenuColumnas";
 import { proyectoAYaml, yamlAProyecto, type ProyectoCompleto } from "./lib/proyectoDb";
@@ -79,6 +81,7 @@ function App() {
   const [menuCalendario, setMenuCalendario] = useState<{ x: number; y: number } | null>(null);
   const [menuColumnas, setMenuColumnas] = useState<{ x: number; y: number } | null>(null);
   const [menuTarea, setMenuTarea] = useState<{ x: number; y: number; codigo: string; nombre: string } | null>(null);
+  const [editorPredecesoras, setEditorPredecesoras] = useState<{ codigo: string; nombre: string } | null>(null);
   const [copiado, setCopiado] = useState("");
   const [proyectos, setProyectos] = useState<ProyectoInfo[]>([]);
   const [popupFecha, setPopupFecha] = useState<PopupFecha | null>(null);
@@ -290,6 +293,18 @@ function App() {
     [indiceDePunto, tareas, geometria],
   );
 
+  const alDobleClicCarta = useCallback(
+    (e: React.MouseEvent) => {
+      const i = indiceDePunto(e);
+      if (i < 0) return;
+      const t = tareas[i];
+      if (!t) return;
+      e.preventDefault();
+      setMenuTarea({ x: e.clientX, y: e.clientY, codigo: t.id, nombre: t.nombre });
+    },
+    [indiceDePunto, tareas],
+  );
+
   const cerrarMenu = useCallback(() => setMenuAbierto(false), []);
   const cambiarParametro = useCallback(
     (clave: string, valor: Valor) =>
@@ -319,6 +334,22 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configJson]);
 
+  const cpmActivado = parametros.cpm === true || parametros.cpm === "true";
+
+  // Fechas resueltas con la misma lógica que la librería (port de cpm.typ),
+  // para mostrar el "término" calculado de cada actividad en el panel.
+  const terminoCalculado = useMemo(() => {
+    const m = new Map<string, string>();
+    try {
+      for (const f of prepararProyecto(texto, { cpm: cpmActivado })) {
+        m.set(f.codigo, fechaIso(f.terminoDias));
+      }
+    } catch {
+      // texto inválido o sin "tareas": se queda vacío
+    }
+    return m;
+  }, [texto, cpmActivado]);
+
   const CAMPOS_TAREA = [
     "nombre", "inicio", "termino", "duracion", "avance", "formato-barra",
     "negrita", "italica", "color-texto", "ocultar-subtareas",
@@ -334,9 +365,14 @@ function App() {
         c[k] = null;
       }
     }
+    // "término" no declarado: se muestra el calculado (inicio+duración o CPM)
+    if (!c.termino) {
+      const calculado = terminoCalculado.get(propsTarea.codigo);
+      if (calculado) c.termino = calculado;
+    }
     return c;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [propsTarea, texto]);
+  }, [propsTarea, texto, terminoCalculado]);
 
   const aplicarCampoTarea = useCallback(
     (clave: string, valor: ValorCampo) => {
@@ -348,6 +384,26 @@ function App() {
       }
     },
     [propsTarea, ponerEnEditor],
+  );
+
+  const abrirPredecesoras = useCallback((codigoTarea: string, nombreTarea: string) => {
+    setMenuTarea(null);
+    setPropsTarea(null);
+    setEditorPredecesoras({ codigo: codigoTarea, nombre: nombreTarea });
+  }, []);
+
+  const guardarPredecesoras = useCallback(
+    (tokens: string[]) => {
+      if (!editorPredecesoras) return;
+      try {
+        ponerEnEditor(editarPredecesoras(textoRef.current, editorPredecesoras.codigo, tokens));
+      } catch (err) {
+        setMensaje(`Error al guardar predecesoras: ${String(err)}`);
+      } finally {
+        setEditorPredecesoras(null);
+      }
+    },
+    [editorPredecesoras, ponerEnEditor],
   );
 
   useEffect(() => setPropsTarea(null), [idActivo]);
@@ -1109,6 +1165,7 @@ function App() {
                 ref={svgCaja}
                 className="svg-contenedor"
                 onClick={alClicSvg}
+                onDoubleClick={alDobleClicCarta}
                 onContextMenu={alClicDerechoCarta}
               >
                 <div
@@ -1174,7 +1231,18 @@ function App() {
           onCambiar={ponerEnEditor}
           onCopia={setCopiado}
           onAviso={setMensaje}
+          onPredecesoras={() => abrirPredecesoras(menuTarea.codigo, menuTarea.nombre)}
           onCerrar={() => setMenuTarea(null)}
+        />
+      )}
+      {editorPredecesoras && (
+        <EditorPredecesoras
+          codigo={editorPredecesoras.codigo}
+          nombre={editorPredecesoras.nombre}
+          tareas={tareasTodas}
+          cpm={cpmActivado}
+          onGuardar={guardarPredecesoras}
+          onCerrar={() => setEditorPredecesoras(null)}
         />
       )}
       {menuProyectosAbierto && (

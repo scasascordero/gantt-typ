@@ -297,3 +297,26 @@ export function pegarTareas(texto: string, copiado: string, ref: string | null):
     return true;
   });
 }
+
+// "A", "A:ss:2", "A:fs:3" → "A"
+export function baseDeToken(token: string): string {
+  const base = token.split(":")[0].trim();
+  return base || token.trim();
+}
+
+// Reemplaza las predecesoras de una tarea. Vacío quita el campo del YAML;
+// con valores, conserva el formato previo del campo (lista o cadena ";").
+export function editarPredecesoras(texto: string, ref: string, tokens: string[]): string {
+  return operar(texto, (doc) => {
+    const fila = localizar(doc, ref);
+    if (!fila) return false;
+    if (tokens.length === 0) {
+      fila.nodo.delete("predecesoras");
+      return true;
+    }
+    const comoString = typeof fila.nodo.get("predecesoras") === "string";
+    const valor = comoString ? tokens.join(";") : tokens;
+    fila.nodo.set("predecesoras", doc.createNode(valor));
+    return true;
+  });
+}

@@ -24,6 +24,7 @@ interface Props {
   onCambiar: (texto: string) => void;
   onCopia: (texto: string) => void;
   onAviso: (mensaje: string) => void;
+  onPredecesoras: () => void;
   onCerrar: () => void;
 }
 
@@ -37,6 +38,7 @@ export default function MenuTarea({
   onCambiar,
   onCopia,
   onAviso,
+  onPredecesoras,
   onCerrar,
 }: Props) {
   const [armado, setArmado] = useState(false);
@@ -115,6 +117,10 @@ export default function MenuTarea({
             title={copiado ? "Pegar la copia debajo de esta tarea" : "Primero copia una tarea"}
           >
             ⧈ Pegar
+          </button>
+          <div className="menu-tarea-sep" />
+          <button onClick={onPredecesoras} title="Abrir el editor de dependencias de esta tarea">
+            ↳ Predecesoras…
           </button>
           <div className="menu-tarea-sep" />
           <div className="menu-tarea-grupo">Mover</div>

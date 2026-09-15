@@ -406,6 +406,26 @@ function App() {
     return m;
   }, [texto, cpmActivado]);
 
+  // Límites de la ventana temporal deducidos de los datos (cuando
+  // ventana-inicio/fin están vacíos la librería usa el mínimo/máximo real).
+  const ventanaCalculada = useMemo(() => {
+    try {
+      const filas = prepararProyecto(texto, { cpm: cpmActivado });
+      if (!filas.length) return null;
+      let min = Infinity;
+      let max = -Infinity;
+      for (const f of filas) {
+        if (f.inicioDias < min) min = f.inicioDias;
+        if (f.terminoDias > max) max = f.terminoDias;
+      }
+      return Number.isFinite(min) && Number.isFinite(max)
+        ? { inicio: fechaIso(min), fin: fechaIso(max) }
+        : null;
+    } catch {
+      return null;
+    }
+  }, [texto, cpmActivado]);
+
   const CAMPOS_TAREA = [
     "nombre", "inicio", "termino", "duracion", "avance", "formato-barra",
     "negrita", "italica", "color-texto", "ocultar-subtareas",
@@ -1302,6 +1322,7 @@ function App() {
           x={menuCalendario.x}
           y={menuCalendario.y}
           valores={parametros}
+          ventanaCalculada={ventanaCalculada}
           onCambiar={cambiarParametro}
           onVerMas={() => {
             setMenuCalendario(null);

@@ -152,7 +152,13 @@ export function leerConfigYaml(texto: string): Record<string, Valor> {
           break;
         case "triestado":
         case "auto-entero":
-          if (v === "auto" || typeof v === "number") salida[clave] = String(v);
+          if (
+            v === "auto" ||
+            v === "true" ||
+            v === "false" ||
+            typeof v === "number"
+          )
+            salida[clave] = String(v);
           break;
         case "opciones":
         case "texto":
@@ -181,4 +187,30 @@ export function leerConfigYaml(texto: string): Record<string, Valor> {
     /* YAML inválido: sin config */
   }
   return salida;
+}
+
+// Escribe la sección `config:` del YAML con los parámetros del menú que
+// difieren de su valor por defecto (los que coinciden con el defecto se
+// omiten). Conserva claves desconocidas que ya estuvieran en `config`.
+export function ponerConfigYaml(texto: string, valores: Record<string, Valor>): string {
+  const doc = parseDocument(texto);
+  if (doc.errors.length > 0) return texto;
+  const config: Record<string, unknown> = {};
+  for (const p of PARAMETROS) {
+    const v = p.clave in valores ? valores[p.clave] : p.defecto;
+    if (JSON.stringify(v) !== JSON.stringify(p.defecto)) config[p.clave] = v;
+  }
+  const actual = doc.get("config", true);
+  if (isMap(actual)) {
+    for (const pair of actual.items) {
+      if (!isScalar(pair.key)) continue;
+      const clave = String(pair.key);
+      if (clave in TIPOS || pair.value == null) continue;
+      config[clave] = (pair.value as unknown as { toJSON?: () => unknown }).toJSON?.() ?? pair.value;
+    }
+  }
+  if (Object.keys(config).length === 0) doc.delete("config");
+  else doc.set("config", doc.createNode(config));
+  if (doc.errors.length > 0) return texto;
+  return doc.toString();
 }

@@ -13,7 +13,7 @@ import { prepararProyecto, fechaIso, type Fila } from "./lib/proyecto";
 import { aMSPDI, aPMXML, aXER } from "./lib/exportadores";
 import { desdeMSPDI, esMSPDI } from "./lib/mspdi";
 import { excelAYaml, detectarColumnas, type ColumnasExcel, type Deteccion, type MatrizExcel } from "./lib/excelImport";
-import { editarCampo, leerCampo, leerConfigYaml, type ValorCampo } from "./lib/yamlEdicion";
+import { editarCampo, leerCampo, leerConfigYaml, ponerConfigYaml, type ValorCampo } from "./lib/yamlEdicion";
 import { editarPredecesoras } from "./lib/yamlOperaciones";
 import EditorPredecesoras from "./EditorPredecesoras";
 import MenuCalendario from "./MenuCalendario";
@@ -306,10 +306,21 @@ function App() {
   );
 
   const cerrarMenu = useCallback(() => setMenuAbierto(false), []);
+  const parametrosRef = useRef(parametros);
+  parametrosRef.current = parametros;
   const cambiarParametro = useCallback(
-    (clave: string, valor: Valor) =>
-      setParametros((prev) => ({ ...prev, [clave]: valor })),
-    [],
+    (clave: string, valor: Valor) => {
+      const proximos = { ...parametrosRef.current, [clave]: valor };
+      setParametros(proximos);
+      // la configuración queda persistida en la sección `config:` del YAML
+      try {
+        const t = ponerConfigYaml(textoRef.current, proximos);
+        if (t && t !== textoRef.current) ponerEnEditor(t);
+      } catch {
+        // no romper el menú si el YAML está a medio escribir
+      }
+    },
+    [ponerEnEditor],
   );
   const restablecerParametros = useCallback(
     () => setParametros({ ...valoresDefault(), ...leerConfigYaml(textoRef.current) }),

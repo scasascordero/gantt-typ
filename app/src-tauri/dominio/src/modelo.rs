@@ -4,6 +4,7 @@ use std::collections::HashMap;
 #[derive(Clone, Debug)]
 pub struct ItemCrudo {
     pub codigo: String,
+    pub id: String,
     pub padre: Option<String>,
     pub map: serde_yaml::Mapping,
 }
@@ -121,6 +122,7 @@ pub struct Resuelto {
 #[serde(rename_all = "camelCase")]
 pub struct Fila {
     pub codigo: String,
+    pub id: String,
     pub nombre: String,
     pub nivel: i32,
     pub es_grupo: bool,
@@ -216,6 +218,27 @@ pub fn interpretar_predecesoras(valor: &serde_yaml::Value) -> Vec<Dep> {
     }
 }
 
+// Mapa de resolución codigo→id (y id→id) para normalizar las referencias de
+// `predecesoras`: un token puede apuntar al código o al id de la tarea, y
+// aquí se lleva al id efectivo de la fila.
+pub fn referencias_de(items: &[ItemCrudo]) -> HashMap<String, String> {
+    let mut refs: HashMap<String, String> = HashMap::new();
+    for it in items {
+        refs.insert(it.codigo.clone(), it.id.clone());
+        refs.insert(it.id.clone(), it.id.clone());
+    }
+    refs
+}
+
+pub fn resolver_deps(mut deps: Vec<Dep>, referencias: &HashMap<String, String>) -> Vec<Dep> {
+    for d in &mut deps {
+        if let Some(id) = referencias.get(&d.pred) {
+            d.pred = id.clone();
+        }
+    }
+    deps
+}
+
 pub fn interpretar_avance(valor: &serde_yaml::Value) -> f64 {
     interpretar_avance_completo(valor).0
 }
@@ -271,6 +294,10 @@ pub fn aplanar(lista: &serde_yaml::Value, padre_contexto: Option<String>, raiz: 
             Some(Value::String(s)) => s.clone(),
             _ => continue,
         };
+        let id = match campo(m, "id") {
+            Some(Value::String(s)) if !s.trim().is_empty() => s.clone(),
+            _ => codigo.clone(),
+        };
         let padre = if raiz {
             match campo(m, "padre") {
                 Some(Value::String(s)) if !s.trim().is_empty() => Some(s.clone()),
@@ -280,7 +307,7 @@ pub fn aplanar(lista: &serde_yaml::Value, padre_contexto: Option<String>, raiz: 
             padre_contexto.clone()
         };
         let subtareas = campo(m, "subtareas").cloned().unwrap_or(Value::Null);
-        out.push(ItemCrudo { codigo: codigo.clone(), padre, map: m.clone() });
+        out.push(ItemCrudo { codigo: codigo.clone(), id, padre, map: m.clone() });
         aplanar(&subtareas, Some(codigo), false, out);
     }
 }

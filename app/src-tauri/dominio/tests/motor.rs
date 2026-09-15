@@ -229,3 +229,55 @@ fn predecesoras_se_resuelven() {
     assert_eq!(por_codigo("1.1.2").predecesoras[0].tipo, "fs");
     assert_eq!(por_codigo("1.1.2").predecesoras[0].lag, 0);
 }
+
+// El campo `id` es la referencia estable para predecesoras: si el YAML
+// trae ids propios, las dependencias escritas por codigo se resuelven al
+// id de la tarea referenciada y la fila lo conserva.
+#[test]
+fn ids_persistentes_resuelven_predecesoras() {
+    let yaml = r#"
+tareas:
+  - codigo: "1"
+    id: "proyecto"
+    nombre: Proyecto
+    subtareas:
+      - codigo: "1.1"
+        id: "dise"
+        nombre: Diseño
+        inicio: "2026-01-05"
+        subtareas:
+          - codigo: "1.1.1"
+            id: "boceto"
+            nombre: Boceto
+            inicio: "2026-01-05"
+            duracion: 1
+          - codigo: "1.1.2"
+            id: "detalle"
+            nombre: Detalle
+            inicio: "2026-01-06"
+            duracion: 1
+            predecesoras: "boceto"
+          - codigo: "1.1.3"
+            id: "prueba"
+            nombre: Prueba
+            inicio: "2026-01-07"
+            duracion: 1
+            predecesoras: "1.1.1"
+"#;
+    let filas = preparar_proyecto(yaml, &OpcionesCpm {
+        cpm: true,
+        inicio_proyecto: None,
+        termino_proyecto: None,
+    }).expect("preparar");
+
+    assert_eq!(filas[0].id, "proyecto");
+    let por_id = |id: &str| filas.iter().find(|f| f.id == id).unwrap();
+    // por id explícito
+    assert_eq!(por_id("detalle").predecesoras[0].pred, "boceto");
+    // por codigo
+    assert_eq!(por_id("prueba").predecesoras[0].pred, "boceto");
+    // sin `id` → el id es el codigo
+    let yaml_sin_id = "tareas:\n  - codigo: \"7\"\n    nombre: Solo\n    inicio: \"2026-01-05\"\n";
+    let filas2 = preparar_proyecto(yaml_sin_id, &OpcionesCpm { cpm: false, inicio_proyecto: None, termino_proyecto: None }).expect("preparar");
+    assert_eq!(filas2[0].id, "7");
+}

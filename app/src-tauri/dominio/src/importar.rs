@@ -118,8 +118,9 @@ fn armas_yaml(planas: Vec<NodoPlano>, comentario: &str) -> Result<String, String
         pila.push(i);
     }
 
-    // códigos punteados por nivel en preorden + mapa uid→código
-    let mut codigo_uid: HashMap<String, String> = HashMap::new();
+    // códigos punteados por nivel en preorden + mapa uid→id (el id del
+    // formato se conserva; si no hay uid, el id es el código)
+    let mut id_uid: HashMap<String, String> = HashMap::new();
     let mut contador: HashMap<usize, usize> = HashMap::new();
     let mut prefijo: HashMap<usize, String> = HashMap::new();
     let mut nodes: Vec<serde_yaml::Mapping> = Vec::with_capacity(n);
@@ -134,12 +135,14 @@ fn armas_yaml(planas: Vec<NodoPlano>, comentario: &str) -> Result<String, String
             format!("{base}.{c}")
         };
         prefijo.insert(nivel, codigo.clone());
+        let id = if t.uid.is_empty() { codigo.clone() } else { t.uid.clone() };
         if !t.uid.is_empty() {
-            codigo_uid.insert(t.uid.clone(), codigo.clone());
+            id_uid.insert(t.uid.clone(), id.clone());
         }
 
         let mut m = serde_yaml::Mapping::new();
         m.insert(k("codigo"), k(&codigo));
+        m.insert(k("id"), k(&id));
         m.insert(k("nombre"), k(&t.nombre));
         if let Some(ini) = &t.inicio {
             m.insert(k("inicio"), k(ini));
@@ -157,7 +160,7 @@ fn armas_yaml(planas: Vec<NodoPlano>, comentario: &str) -> Result<String, String
         nodes.push(m);
     }
 
-    // predecesoras: uid → código final
+    // predecesoras: uid → id del predecesor
     for (i, t) in planas.iter().enumerate() {
         if t.deps.is_empty() {
             continue;
@@ -166,7 +169,7 @@ fn armas_yaml(planas: Vec<NodoPlano>, comentario: &str) -> Result<String, String
             .deps
             .iter()
             .filter_map(|(uid, tipo, lag)| {
-                let pred = codigo_uid.get(uid)?;
+                let pred = id_uid.get(uid)?;
                 let s = if *tipo == "fs" && *lag == 0 {
                     pred.clone()
                 } else if *lag == 0 {
@@ -692,7 +695,7 @@ mod tests {
         assert!(y.contains("codigo: \"1.1\""));
         assert!(y.contains("codigo: \"1.2\""));
         assert!(y.contains("avance: \"100%\""));
-        assert!(y.contains("predecesoras: \"1.1\""));
+        assert!(y.contains("predecesoras: \"2\""));
         assert!(y.contains("subtareas:"));
     }
 
@@ -721,7 +724,7 @@ PRED_ID	TASK_ID	PRED_TASK_ID	PROJECT_ID	PRED_TYPE	PRED_LAG
         assert!(y.contains("codigo: \"1.1\""));
         assert!(y.contains("codigo: \"1.2\""));
         assert!(y.contains("avance: \"100%\""));
-        assert!(y.contains("predecesoras: \"1.1\""));
+        assert!(y.contains("predecesoras: \"2\""));
         assert!(y.contains("subtareas:"));
     }
 
@@ -803,12 +806,59 @@ tareas:
         assert!(y1.contains("codigo: \"1\""));
         assert!(y1.contains("codigo: \"1.1.2\""));
         assert!(y1.contains("nombre: \"Detalle\""));
-        assert!(y1.contains("predecesoras: \"1.1.1\""));
+        assert!(y1.contains("predecesoras: \"3\""));
         assert!(y1.contains("avance: \"100%\""));
 
         let y2 = desde_xer(&a_xer(&p)).unwrap();
         assert!(y2.contains("codigo: \"1.1\""), "XER: {}", &y2[..y2.len().min(300)]);
-        assert!(y2.contains("predecesoras: \"1.1.1\""));
+        assert!(y2.contains("predecesoras: \"3\""));
         assert!(y2.contains("avance: \"100%\""));
+    }
+
+    // Bench orientativo a ~3000 tareas: correr con
+    //   cargo test --release -p dominio bench_3000 -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn bench_3000() {
+        use std::time::Instant;
+        use crate::exportar::{a_pmxml, a_xer, proyecto};
+        use crate::modelo::OpcionesCpm;
+        use crate::preparar::preparar_proyecto;
+
+        let mut yaml = String::from("tareas:\n");
+        let mut total = 0;
+        for g in 1..=60 {
+            yaml.push_str(&format!("  - codigo: \"{g}\"\n    nombre: Grupo {g}\n    subtareas:\n"));
+            for t in 1..=50 {
+                total += 1;
+                let av = if t % 4 == 0 { "100%" } else { "0%" };
+                yaml.push_str(&format!(
+                    "      - codigo: \"{g}.{t}\"\n        nombre: Tarea {g}.{t}\n        inicio: \"2026-01-05\"\n        duracion: 3\n        avance: \"{av}\"\n"
+                ));
+            }
+            total += 1;
+        }
+        println!("tareas generadas: {total} (bytes YAML: {})", yaml.len());
+
+        let t0 = Instant::now();
+        let filas = preparar_proyecto(&yaml, &OpcionesCpm { cpm: true, inicio_proyecto: None, termino_proyecto: None }).unwrap();
+        let t1 = Instant::now();
+        println!("preparar_proyecto (parse+árbol+CPM): {:?}  filas={}", t1 - t0, filas.len());
+
+        let p = proyecto("bench", filas);
+        let t2 = Instant::now();
+        let pmx = a_pmxml(&p);
+        let t3 = Instant::now();
+        println!("a_pmxml: {:?} ({} bytes)", t3 - t2, pmx.len());
+
+        let t4 = Instant::now();
+        let xer = a_xer(&p);
+        let t5 = Instant::now();
+        println!("a_xer: {:?} ({} bytes)", t5 - t4, xer.len());
+
+        let t6 = Instant::now();
+        let xl = crate::excel::a_excel(&p).unwrap();
+        let t7 = Instant::now();
+        println!("a_excel: {:?} ({} bytes)", t7 - t6, xl.len());
     }
 }

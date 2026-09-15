@@ -32,6 +32,7 @@ pub fn filas_a_yaml(filas: &[Fila]) -> String {
 fn fila_a_mapa(f: &Fila) -> Value {
     let mut m = Mapping::new();
     push_str(&mut m, "codigo", Value::String(f.codigo.clone()));
+    push_str(&mut m, "id", Value::String(f.id.clone()));
     push_str(&mut m, "nombre", Value::String(f.nombre.clone()));
     push_str(&mut m, "nivel", Value::Number(f.nivel.into()));
     push_str(&mut m, "es-grupo", Value::Bool(f.es_grupo));
@@ -181,6 +182,7 @@ tareas:
     fn roundtrip_fila_equivalente_a_json() {
         let fila = Fila {
             codigo: "a".to_string(),
+            id: "a".to_string(),
             nombre: "Tarea".to_string(),
             nivel: 2,
             es_grupo: false,

@@ -24,6 +24,12 @@ struct Uid {
     outline: usize,
 }
 
+impl Clone for Uid {
+    fn clone(&self) -> Self {
+        Uid { uid: self.uid, wbs: self.wbs.clone(), outline: self.outline }
+    }
+}
+
 // UID secuencial + WBS punteado (1, 1.2, 1.2.3) según el nivel DFS.
 // UIDs empiezan en 1 (como en TS: `i + 1` con i desde 0).
 fn numerar(filas: &[Fila]) -> HashMap<String, Uid> {
@@ -46,11 +52,23 @@ fn numerar(filas: &[Fila]) -> HashMap<String, Uid> {
         };
         prefijo.insert(f.nivel, wbs.clone());
         m.insert(
-            f.codigo.clone(),
+            f.id.clone(),
             Uid { uid: i + 1, wbs, outline: f.nivel as usize + 1 },
         );
     }
     m
+}
+
+// UID del padre: `padre` apunta al código (identidad del árbol); se traduce
+// al id para consultar el mapa de uids (keyed por id).
+fn parent_uid(
+    padre: &Option<String>,
+    codigo_a_id: &HashMap<&str, &str>,
+    uids: &HashMap<String, Uid>,
+) -> Option<Uid> {
+    let c = padre.as_deref()?;
+    let id = *codigo_a_id.get(c)?;
+    uids.get(id).cloned()
 }
 
 fn mspdi_tipo(t: &str) -> usize {
@@ -101,7 +119,8 @@ fn bloque(tabla: &str, columnas: &[&str], filas: &[Vec<String>]) -> String {
 
 pub fn a_mspdi(p: &ProyectoExportable) -> String {
     let uids = numerar(&p.filas);
-    let por_codigo: HashMap<&str, &Fila> = p.filas.iter().map(|f| (f.codigo.as_str(), f)).collect();
+    let por_id: HashMap<&str, &Fila> = p.filas.iter().map(|f| (f.id.as_str(), f)).collect();
+    let codigo_a_id: HashMap<&str, &str> = p.filas.iter().map(|f| (f.codigo.as_str(), f.id.as_str())).collect();
     let ahora = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S").to_string();
     let mut l = Vec::new();
     l.push("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>".to_string());
@@ -111,7 +130,7 @@ pub fn a_mspdi(p: &ProyectoExportable) -> String {
     l.push(format!("  <CreationDate>{}</CreationDate>", ahora));
     l.push("  <Tasks>".to_string());
     for f in &p.filas {
-        let u = &uids[&f.codigo];
+        let u = &uids[&f.id];
         let inicio = fecha_iso(f.inicio_dias);
         let fin = fecha_iso(f.termino_dias);
         let dur_h = if f.hito || f.es_grupo { 0.0 } else { f.duracion as f64 * 24.0 };
@@ -141,13 +160,11 @@ pub fn a_mspdi(p: &ProyectoExportable) -> String {
         l.push(format!("      <OutlineLevel>{}</OutlineLevel>", u.outline));
         l.push(format!("      <OutlineNumber>{}</OutlineNumber>", u.wbs));
         l.push(format!("      <WBS>{}</WBS>", u.wbs));
-        if let Some(padre) = &f.padre {
-            if let Some(pu) = uids.get(padre) {
-                l.push(format!("      <ParentID>{}</ParentID>", pu.uid));
-            }
+        if let Some(u_padre) = parent_uid(&f.padre, &codigo_a_id, &uids) {
+            l.push(format!("      <ParentID>{}</ParentID>", u_padre.uid));
         }
         for d in &f.predecesoras {
-            if !por_codigo.contains_key(d.pred.as_str()) {
+            if !por_id.contains_key(d.pred.as_str()) {
                 continue;
             }
             l.push("      <PredecessorLink>".to_string());
@@ -170,7 +187,8 @@ pub fn a_mspdi(p: &ProyectoExportable) -> String {
 
 pub fn a_pmxml(p: &ProyectoExportable) -> String {
     let uids = numerar(&p.filas);
-    let por_codigo: HashMap<&str, &Fila> = p.filas.iter().map(|f| (f.codigo.as_str(), f)).collect();
+    let por_id: HashMap<&str, &Fila> = p.filas.iter().map(|f| (f.id.as_str(), f)).collect();
+    let codigo_a_id: HashMap<&str, &str> = p.filas.iter().map(|f| (f.codigo.as_str(), f.id.as_str())).collect();
     let fin_proyecto = p.filas.iter().map(|f| f.termino_dias).max().unwrap_or(0);
     let ini_proyecto = p.filas.iter().map(|f| f.inicio_dias).min().unwrap_or(0);
     let mut l = Vec::new();
@@ -194,7 +212,7 @@ pub fn a_pmxml(p: &ProyectoExportable) -> String {
     l.push(format!("    <StartDate>{} 00:00</StartDate>", fecha_iso(ini_proyecto)));
     l.push(format!("    <EndDate>{} 23:59</EndDate>", fecha_iso(fin_proyecto)));
     for f in &p.filas {
-        let u = &uids[&f.codigo];
+        let u = &uids[&f.id];
         let tp = if f.es_grupo {
             "Task Summary"
         } else if f.hito {
@@ -220,17 +238,15 @@ pub fn a_pmxml(p: &ProyectoExportable) -> String {
         if let Some(h) = f.holgura {
             l.push(format!("      <TotalFloat>{}</TotalFloat>", h as f64 * 24.0 * 60.0));
         }
-        if let Some(padre) = &f.padre {
-            if let Some(pu) = uids.get(padre) {
-                l.push(format!("      <ParentTaskID>{}</ParentTaskID>", pu.uid));
-            }
+        if let Some(u_padre) = parent_uid(&f.padre, &codigo_a_id, &uids) {
+            l.push(format!("      <ParentTaskID>{}</ParentTaskID>", u_padre.uid));
         }
         l.push("    </Task>".to_string());
     }
     let mut rel_id = 1;
     for f in &p.filas {
         for d in &f.predecesoras {
-            if !por_codigo.contains_key(d.pred.as_str()) {
+            if !por_id.contains_key(d.pred.as_str()) {
                 continue;
             }
             l.push("    <Relationship>".to_string());
@@ -239,8 +255,8 @@ pub fn a_pmxml(p: &ProyectoExportable) -> String {
             l.push("      <ProjectID>1</ProjectID>".to_string());
             l.push(format!("      <PredecessorTaskID>{}</PredecessorTaskID>", uids[&d.pred].uid));
             l.push(format!("      <PredecessorTaskUniqueID>{}</PredecessorTaskUniqueID>", uids[&d.pred].uid));
-            l.push(format!("      <SuccessorTaskID>{}</SuccessorTaskID>", uids[&f.codigo].uid));
-            l.push(format!("      <SuccessorTaskUniqueID>{}</SuccessorTaskUniqueID>", uids[&f.codigo].uid));
+            l.push(format!("      <SuccessorTaskID>{}</SuccessorTaskID>", uids[&f.id].uid));
+            l.push(format!("      <SuccessorTaskUniqueID>{}</SuccessorTaskUniqueID>", uids[&f.id].uid));
             l.push(format!("      <LagDurationInteger>{}</LagDurationInteger>", d.lag));
             l.push("      <LagDurationType>2</LagDurationType>".to_string());
             l.push("    </Relationship>".to_string());
@@ -248,7 +264,7 @@ pub fn a_pmxml(p: &ProyectoExportable) -> String {
         }
     }
     for f in &p.filas {
-        let u = &uids[&f.codigo];
+        let u = &uids[&f.id];
         l.push("    <WBS>".to_string());
         l.push(format!("      <WBSID>{}</WBSID>", u.uid));
         l.push("      <ProjectID>1</ProjectID>".to_string());
@@ -288,7 +304,7 @@ pub fn a_pmxml(p: &ProyectoExportable) -> String {
 
 pub fn a_xer(p: &ProyectoExportable) -> String {
     let uids = numerar(&p.filas);
-    let por_codigo: HashMap<&str, &Fila> = p.filas.iter().map(|f| (f.codigo.as_str(), f)).collect();
+    let por_id: HashMap<&str, &Fila> = p.filas.iter().map(|f| (f.id.as_str(), f)).collect();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
@@ -324,7 +340,7 @@ pub fn a_xer(p: &ProyectoExportable) -> String {
         .filas
         .iter()
         .map(|f| {
-            let u = &uids[&f.codigo];
+            let u = &uids[&f.id];
             vec![
                 u.uid.to_string(),
                 "1".to_string(),
@@ -365,7 +381,7 @@ pub fn a_xer(p: &ProyectoExportable) -> String {
         .filas
         .iter()
         .map(|f| {
-            let u = &uids[&f.codigo];
+            let u = &uids[&f.id];
             let ttype = if f.es_grupo {
                 "TT_Sub"
             } else if f.hito {
@@ -408,12 +424,12 @@ pub fn a_xer(p: &ProyectoExportable) -> String {
     let mut preds: Vec<Vec<String>> = Vec::new();
     for f in &p.filas {
         for d in &f.predecesoras {
-            if !por_codigo.contains_key(d.pred.as_str()) {
+            if !por_id.contains_key(d.pred.as_str()) {
                 continue;
             }
             preds.push(vec![
                 pred_id.to_string(),
-                uids[&f.codigo].uid.to_string(),
+                uids[&f.id].uid.to_string(),
                 uids[&d.pred].uid.to_string(),
                 "1".to_string(),
                 "1".to_string(),

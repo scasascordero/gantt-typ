@@ -47,7 +47,7 @@ fn resolver_hoja(
     let termino_dias: i64;
 
     if let Some(fechas) = fechas_de {
-        if let Some(&(es, ef)) = fechas.get(codigo) {
+        if let Some(&(es, ef)) = fechas.get(&item.id) {
             inicio_dias = es;
             termino_dias = ef;
             dur = ef - es + 1;
@@ -209,9 +209,10 @@ struct ExtraCpm {
 }
 
 fn marcar_critico(ctx: &Ctx, codigo: &str, criticos: &HashMap<String, bool>) -> bool {
+    let id = ctx.indice.mapa.get(codigo).map(|x| x.id.clone()).unwrap_or_else(|| codigo.to_string());
     let hijos = ctx.indice.hijos_de.get(codigo).cloned().unwrap_or_default();
     if hijos.is_empty() {
-        criticos.get(codigo).copied().unwrap_or(false)
+        criticos.get(&id).copied().unwrap_or(false)
     } else {
         hijos.iter().any(|h| marcar_critico(ctx, h, criticos))
     }
@@ -223,6 +224,7 @@ fn extra_cpm_fila(
     res_cpm: &HashMap<String, ResCpm>,
     critico_de: &HashMap<String, bool>,
     es_grupo: bool,
+    referencias: &HashMap<String, String>,
 ) -> ExtraCpm {
     if es_grupo {
         ExtraCpm {
@@ -231,13 +233,16 @@ fn extra_cpm_fila(
             predecesoras: Vec::new(),
         }
     } else {
-        let r = &res_cpm[codigo];
         let item = ctx.indice.mapa.get(codigo).unwrap();
+        let r = &res_cpm[&item.id];
         ExtraCpm {
             holgura: Some(r.holgura),
             critico: Some(r.critico),
-            predecesoras: interpretar_predecesoras(
-                campo(&item.map, "predecesoras").unwrap_or(&serde_yaml::Value::Null)
+            predecesoras: resolver_deps(
+                interpretar_predecesoras(
+                    campo(&item.map, "predecesoras").unwrap_or(&serde_yaml::Value::Null)
+                ),
+                referencias,
             ),
         }
     }
@@ -266,6 +271,7 @@ pub fn preparar_proyecto(texto: &str, opts: &OpcionesCpm) -> Result<Vec<Fila>, S
     }
 
     let indice = construir_indice(&plano);
+    let referencias = referencias_de(&plano);
 
     // Orden DFS (padre antes que hijos), con nivel
     let mut orden: Vec<(String, i32)> = Vec::new();
@@ -319,10 +325,13 @@ pub fn preparar_proyecto(texto: &str, opts: &OpcionesCpm) -> Result<Vec<Fila>, S
                 } else { None }
             })
             .unwrap_or(1);
-        let predecesoras = interpretar_predecesoras(
-            campo(&it.map, "predecesoras").unwrap_or(&serde_yaml::Value::Null)
+        let predecesoras = resolver_deps(
+            interpretar_predecesoras(
+                campo(&it.map, "predecesoras").unwrap_or(&serde_yaml::Value::Null)
+            ),
+            &referencias,
         );
-        HojaCpm { codigo: it.codigo.clone(), dur, es_ancla, ef_ancla, predecesoras }
+        HojaCpm { codigo: it.id.clone(), dur, es_ancla, ef_ancla, predecesoras }
     }).collect();
 
     let mut fechas_de: Option<HashMap<String, (i64, i64)>> = None;
@@ -370,7 +379,7 @@ pub fn preparar_proyecto(texto: &str, opts: &OpcionesCpm) -> Result<Vec<Fila>, S
                 && !es_grupo_fila);
 
         let extra = if opts.cpm {
-            extra_cpm_fila(&ctx, codigo, &res_cpm, &critico_de, es_grupo_fila)
+            extra_cpm_fila(&ctx, codigo, &res_cpm, &critico_de, es_grupo_fila, &referencias)
         } else {
             ExtraCpm {
                 holgura: None,
@@ -378,8 +387,11 @@ pub fn preparar_proyecto(texto: &str, opts: &OpcionesCpm) -> Result<Vec<Fila>, S
                 predecesoras: if es_grupo_fila {
                     Vec::new()
                 } else {
-                    interpretar_predecesoras(
-                        campo(&item.map, "predecesoras").unwrap_or(&serde_yaml::Value::Null)
+                    resolver_deps(
+                        interpretar_predecesoras(
+                            campo(&item.map, "predecesoras").unwrap_or(&serde_yaml::Value::Null)
+                        ),
+                        &referencias,
                     )
                 },
             }
@@ -392,6 +404,7 @@ pub fn preparar_proyecto(texto: &str, opts: &OpcionesCpm) -> Result<Vec<Fila>, S
 
         filas.push(Fila {
             codigo: codigo.clone(),
+            id: item.id.clone(),
             nombre,
             nivel: *nivel,
             es_grupo: es_grupo_fila,

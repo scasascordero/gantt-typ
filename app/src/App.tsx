@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { basicSetup } from "codemirror";
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { yaml } from "@codemirror/lang-yaml";
 import { invoke } from "@tauri-apps/api/core";
@@ -8,6 +8,7 @@ import ejemploDatos from "../../ejemplos/ejemplo_1.yaml?raw";
 import { compilarSvg, fuentesLibreria } from "./lib/libreria";
 import { analizarSvg } from "./lib/geometria";
 import { listarTareas } from "./lib/yamlLineas";
+import { validarTexto } from "./lib/validacion";
 import { generarMainTyp, valoresDefault, type Valor } from "./lib/params";
 import { prepararProyecto, fechaIso, type Fila } from "./lib/proyecto";
 import { aMSPDI, aPMXML, aXER } from "./lib/exportadores";
@@ -73,6 +74,10 @@ function App() {
   const [zoom, setZoom] = useState(1);
   const [anchoEditorPct, setAnchoEditorPct] = useState(40);
   const [editorOculto, setEditorOculto] = useState(false);
+  const [editorEditable, setEditorEditable] = useState(false); // si mostrar el YAML en modo editable
+  const editorEditableRef = useRef(editorEditable);
+  editorEditableRef.current = editorEditable;
+  const readonlyComp = useRef(new Compartment());
   const [arrastrandoDivisor, setArrastrandoDivisor] = useState(false);
   const contenidoRef = useRef<HTMLElement | null>(null);
   const [parametros, setParametros] = useState<Record<string, Valor>>(() => valoresDefault());
@@ -146,6 +151,7 @@ function App() {
         extensions: [
           basicSetup,
           yaml(),
+          readonlyComp.current.of(EditorState.readOnly.of(true)),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) alCambiarTexto(u.state.doc.toString());
           }),
@@ -252,7 +258,41 @@ function App() {
   const ponerEnEditor = useCallback((textoNuevo: string) => {
     const v = editorRef.current;
     if (!v) return;
-    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: textoNuevo } });
+    v.dispatch({
+      changes: { from: 0, to: v.state.doc.length, insert: textoNuevo },
+    });
+  }, []);
+
+  // Alterna la edición de texto libre (por defecto el YAML es solo lectura
+  // y toda mutación pasa por la UI, que siempre genera YAML válido).
+  const alternarEditorEditable = useCallback(() => {
+    const nuevo = !editorEditableRef.current;
+    setEditorEditable(nuevo);
+    const v = editorRef.current;
+    if (v) {
+      v.dispatch({
+        effects: readonlyComp.current.reconfigure(EditorState.readOnly.of(!nuevo)),
+      });
+    }
+    setMensaje(
+      nuevo
+        ? "Edición de texto habilitada: cuidá que el YAML siga siendo válido."
+        : "Texto bloqueado: edición solo por la carta.",
+    );
+  }, []);
+
+  const irALinea = useCallback((linea: number) => {
+    const v = editorRef.current;
+    if (!v) return;
+    setEditorOculto(false);
+    const doc = v.state.doc;
+    const n = Math.min(Math.max(1, linea), doc.lines);
+    const line = doc.line(n);
+    v.dispatch({
+      selection: { anchor: line.from },
+      effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+    });
+    v.focus();
   }, []);
 
   const alClicDerechoCarta = useCallback(
@@ -346,6 +386,11 @@ function App() {
   }, [configJson]);
 
   const cpmActivado = parametros.cpm === true || parametros.cpm === "true";
+
+  // Validación estructural en vivo (mismas reglas que la librería)
+  const diagnosticos = useMemo(() => validarTexto(texto, cpmActivado), [texto, cpmActivado]);
+  const erroresValidacion = diagnosticos.filter((x) => x.severidad === "error");
+  const hayErroresValidacion = erroresValidacion.length > 0;
 
   // Fechas resueltas con la misma lógica que la librería (port de cpm.typ),
   // para mostrar el "término" calculado de cada actividad en el panel.
@@ -967,11 +1012,14 @@ function App() {
     }
   };
 
-  const estados: "ok" | "error" | "compilando" = errores.length
-    ? "error"
-    : svg
-      ? "ok"
-      : "compilando";
+  const nProblemas = errores.length + erroresValidacion.length;
+
+  const estados: "ok" | "error" | "compilando" =
+    nProblemas
+      ? "error"
+      : svg
+        ? "ok"
+        : "compilando";
 
   return (
     <div className="app">
@@ -981,8 +1029,8 @@ function App() {
           Configurar
         </button>
         <div className={`estado estado-${estados}`}>
-          {errores.length
-            ? `${errores.length} error(es)`
+          {nProblemas
+            ? `${nProblemas} problema(s)`
             : svg
               ? `ok · ${milis.toFixed(0)} ms · ${tareas.length} tareas`
               : "compilando…"}
@@ -1095,10 +1143,18 @@ function App() {
               </div>
             )}
           </div>
-          <button onClick={() => guardarDoc(false)} title="Guardar (Ctrl+S)">
+          <button
+            onClick={() => guardarDoc(false)}
+            disabled={hayErroresValidacion}
+            title={hayErroresValidacion ? "Corrige los errores de validación antes de guardar" : "Guardar (Ctrl+S)"}
+          >
             Guardar
           </button>
-          <button onClick={() => guardarDoc(true)} title="Guardar como…">
+          <button
+            onClick={() => guardarDoc(true)}
+            disabled={hayErroresValidacion}
+            title={hayErroresValidacion ? "Corrige los errores de validación antes de guardar" : "Guardar como…"}
+          >
             Guardar como…
           </button>
           <button
@@ -1126,6 +1182,24 @@ function App() {
         }}
       >
         <section className="panel-editor" onContextMenu={alClicDerechoEditor}>
+          <div className="editor-cab">
+            <span className="editor-estado">
+              <span className={`editor-ateralita${editorEditable ? " activo" : ""}`}>
+                {editorEditable ? "editable" : "solo lectura"}
+              </span>
+            </span>
+            <button
+              className="editor-desbloquear"
+              onClick={alternarEditorEditable}
+              title={
+                editorEditable
+                  ? "Volver a solo lectura: las ediciones pasan solo por la carta"
+                  : "Habilitar la edición directa del YAML (con riesgo de invalidar la carta)"
+              }
+            >
+              {editorEditable ? "Bloquear texto" : "Editar texto"}
+            </button>
+          </div>
           <div ref={contenedorEditor} className="editor" />
         </section>
 
@@ -1197,6 +1271,24 @@ function App() {
           )}
         </section>
       </main>
+      {diagnosticos.length > 0 && (
+        <div className="diagnosticos">
+          {diagnosticos.slice(0, 12).map((d, i) => (
+            <button
+              key={i}
+              className={`diag diag-${d.severidad}`}
+              onClick={() => irALinea(d.linea)}
+              title="Mostrar el YAML en esa línea"
+            >
+              <span className="diag-linea">{d.linea}</span>
+              <span className="diag-texto">{d.mensaje}</span>
+            </button>
+          ))}
+          {diagnosticos.length > 12 && (
+            <span className="diag-mas">… y {diagnosticos.length - 12} más</span>
+          )}
+        </div>
+      )}
       {menuAbierto && (
         <MenuParametros
           valores={parametros}

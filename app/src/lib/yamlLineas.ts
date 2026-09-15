@@ -30,8 +30,11 @@ export function listarTareas(texto: string): Tarea[] {
     const resultado: Tarea[] = [];
     const aplanar = (nodo: unknown, nivel: number): void => {
       if (!isMap(nodo)) return;
-      const codigo = nodo.get("codigo");
-      const nombre = nodo.get("nombre");
+      // `toJSON()` resuelve los campos a valores JS de forma uniforme
+      // (el get() directo de nodos devuelve colecciones crudas según el estilo).
+      const datos = nodo.toJSON() as Record<string, unknown>;
+      const codigo = datos.codigo;
+      const nombre = datos.nombre;
       const linea = texto.slice(0, nodo.range ? nodo.range[0] : 0).split("\n").length;
       if (typeof codigo === "string") {
         resultado.push({
@@ -39,12 +42,12 @@ export function listarTareas(texto: string): Tarea[] {
           nombre: typeof nombre === "string" ? nombre : String(codigo),
           linea,
           nivel,
-          predecesoras: tokensDePredecesoras(nodo.get("predecesoras")),
+          predecesoras: tokensDePredecesoras(datos.predecesoras),
         });
       }
       // con `ocultar-subtareas: true` la librería no dibuja el subárbol:
       // hay que saltarlo también acá para que el clic siga filando justo
-      if (nodo.get("ocultar-subtareas") === true) return;
+      if (datos["ocultar-subtareas"] === true) return;
       const sub = nodo.get("subtareas", true);
       if (isSeq(sub)) for (const item of sub.items) aplanar(item, nivel + 1);
     };

@@ -606,6 +606,66 @@ body,
   z-index: 40;
 }
 
+.menu-calendario,
+.menu-columna {
+  position: fixed;
+  z-index: 50;
+  width: min(300px, calc(100vw - 16px));
+  max-height: min(80vh, 360px);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgb(15 23 42 / 0.25);
+  font-size: 13px;
+}
+
+.menu-calendario-cuerpo,
+.menu-columna-cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  overflow: auto;
+}
+
+.menu-calendario-mas,
+.menu-columna-mas {
+  margin-top: 4px;
+  padding: 6px 0;
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  text-align: left;
+}
+
+.menu-calendario-mas:hover,
+.menu-columna-mas:hover {
+  text-decoration: underline;
+}
+
+.menu-columna-ayuda {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.menu-columna .param-fila {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.menu-columna .param-checks {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  max-width: 100%;
+  gap: 4px;
+}
+
 .menu-contexto {
   position: fixed;
   z-index: 50;
@@ -642,6 +702,99 @@ body,
 
 .menu-cerrar:hover {
   color: #0f172a;
+}
+
+.menu-tarea {
+  position: fixed;
+  z-index: 50;
+  width: min(230px, calc(100vw - 16px));
+  max-height: min(80vh, 360px);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgb(15 23 42 / 0.22);
+  font-size: 12.5px;
+  overflow: hidden;
+}
+
+.menu-tarea-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.menu-tarea-titulo > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.menu-tarea-titulo small {
+  font-weight: 400;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-tarea-cuerpo {
+  overflow: auto;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.menu-tarea-cuerpo button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.menu-tarea-cuerpo button:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.menu-tarea-cuerpo button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.menu-tarea-cuerpo button.destructivo {
+  color: #b91c1c;
+}
+
+.menu-tarea-cuerpo button.destructivo:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.menu-tarea-sep {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 4px 6px;
+}
+
+.menu-tarea-grupo {
+  padding: 4px 10px 2px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .menu-cuerpo {

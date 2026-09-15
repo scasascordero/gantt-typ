@@ -18,7 +18,7 @@ function hexCompleto(v: string): string {
   return "000000";
 }
 
-function Fila({ p, valor, onCambiar }: { p: ParamDef; valor: Valor; onCambiar: (v: Valor) => void }) {
+export function Fila({ p, valor, onCambiar }: { p: ParamDef; valor: Valor; onCambiar: (v: Valor) => void }) {
   switch (p.tipo) {
     case "color": {
       const hex = hexCompleto(String(valor));

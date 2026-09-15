@@ -18,6 +18,10 @@ export interface Geometria {
   bandas: Banda[];
   barras: Rect[];
   hoy?: number;
+  /** Cabecera del calendario (sobre la primera banda), en el área de la línea de tiempo. */
+  calendario?: { x0: number; y0: number; y1: number };
+  /** Cabecera de las columnas de datos (a la izquierda del calendario). */
+  columnas?: { x0: number; x1: number; y0: number; y1: number };
 }
 
 export interface Forma {
@@ -85,7 +89,36 @@ export function analizarSvg(svg: string): Geometria {
   const hoyForma = formas.find((f) => f.fill === "dc2626");
   const hoy = hoyForma ? (hoyForma.y0 + hoyForma.y1) / 2 : undefined;
 
-  return { ancho, alto, bandas, barras, hoy };
+  let calendario: { x0: number; y0: number; y1: number } | undefined;
+  let columnas: { x0: number; x1: number; y0: number; y1: number } | undefined;
+  if (bandas.length) {
+    const base = bandas[0].y0;
+    const textos = leerTextos(svg);
+    const etiquetas = textos.map((t) => t.y).filter((y) => y >= base - 64 && y < base - 2);
+    if (etiquetas.length) {
+      const y0 = Math.max(0, Math.min(...etiquetas) - 12);
+      // La línea de tiempo arranca donde empiezan los fondos de las bandas
+      // del calendario (relleno color-calendario); las celdas de las columnas
+      // de datos quedan a la izquierda de ese borde (bordeNombres a su derecha).
+      let tl = ancho;
+      for (const f of formas) {
+        if (f.fill === "f8fafc" && f.y0 < base - 0.5 && f.x0 >= bordeNombres && f.x0 < tl) tl = f.x0;
+      }
+      const enCabecera = textos.filter((t) => t.y >= y0 - 1 && t.y <= base);
+      const conCols = enCabecera.some((t) => t.x >= bordeNombres - 1 && t.x < tl);
+      const conCal = enCabecera.some((t) => t.x >= tl - 1);
+      if (conCols)
+        columnas = {
+          x0: r2(bordeNombres),
+          x1: r2(Math.max(tl, bordeNombres)),
+          y0: r2(y0),
+          y1: r2(base),
+        };
+      if (conCal) calendario = { x0: r2(tl), y0: r2(y0), y1: r2(base) };
+    }
+  }
+
+  return { ancho, alto, bandas, barras, hoy, calendario, columnas };
 }
 
 export function leerTextos(svg: string): { x: number; y: number }[] {

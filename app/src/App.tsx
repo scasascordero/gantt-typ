@@ -14,9 +14,12 @@ import { aMSPDI, aPMXML, aXER } from "./lib/exportadores";
 import { desdeMSPDI, esMSPDI } from "./lib/mspdi";
 import { excelAYaml, detectarColumnas, type ColumnasExcel, type Deteccion, type MatrizExcel } from "./lib/excelImport";
 import { editarCampo, leerCampo, leerConfigYaml, type ValorCampo } from "./lib/yamlEdicion";
+import MenuCalendario from "./MenuCalendario";
+import MenuColumnas from "./MenuColumnas";
 import { proyectoAYaml, yamlAProyecto, type ProyectoCompleto } from "./lib/proyectoDb";
 import MenuParametros from "./MenuParametros";
 import MenuProyectos, { type ProyectoInfo } from "./MenuProyectos";
+import MenuTarea from "./MenuTarea";
 import PropiedadesTarea from "./PropiedadesTarea";
 import "./App.css";
 
@@ -73,6 +76,10 @@ function App() {
   const [parametros, setParametros] = useState<Record<string, Valor>>(() => valoresDefault());
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [menuProyectosAbierto, setMenuProyectosAbierto] = useState(false);
+  const [menuCalendario, setMenuCalendario] = useState<{ x: number; y: number } | null>(null);
+  const [menuColumnas, setMenuColumnas] = useState<{ x: number; y: number } | null>(null);
+  const [menuTarea, setMenuTarea] = useState<{ x: number; y: number; codigo: string; nombre: string } | null>(null);
+  const [copiado, setCopiado] = useState("");
   const [proyectos, setProyectos] = useState<ProyectoInfo[]>([]);
   const [popupFecha, setPopupFecha] = useState<PopupFecha | null>(null);
   const [exportMenuAbierto, setExportMenuAbierto] = useState(false);
@@ -180,6 +187,9 @@ function App() {
     const k = Math.max(1, Math.floor(Number(nivelActual)) || 1);
     return todas.filter((t) => t.nivel < k);
   }, [texto, nivelActual]);
+  const tareasTodas = useMemo(() => listarTareas(texto), [texto]);
+  const tareasTodasRef = useRef(tareasTodas);
+  tareasTodasRef.current = tareasTodas;
   const geometria = useMemo(() => (svg ? analizarSvg(svg) : null), [svg]);
 
   const saltarATarea = useCallback(
@@ -244,13 +254,40 @@ function App() {
 
   const alClicDerechoCarta = useCallback(
     (e: React.MouseEvent) => {
+      const caja = svgCaja.current;
+      const g = geometria;
+      if (!caja || !g || !g.bandas.length) return;
+      const s = caja.querySelector("svg");
+      if (!s || !g.ancho) return;
+      const rect = s.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const py = (e.clientY - rect.top) * (g.ancho / rect.width);
+      const px = (e.clientX - rect.left) * (g.ancho / rect.width);
+      // Botón derecho sobre las celdas de cabecera de las columnas de datos.
+      if (
+        g.columnas &&
+        py >= g.columnas.y0 &&
+        py < g.columnas.y1 &&
+        px >= g.columnas.x0 &&
+        px < g.columnas.x1
+      ) {
+        e.preventDefault();
+        setMenuColumnas({ x: e.clientX, y: e.clientY });
+        return;
+      }
+      // Botón derecho sobre la cabecera del calendario: menú de calendario.
+      if (g.calendario && py >= g.calendario.y0 && py < g.calendario.y1 && px >= g.calendario.x0) {
+        e.preventDefault();
+        setMenuCalendario({ x: e.clientX, y: e.clientY });
+        return;
+      }
       const i = indiceDePunto(e);
       if (i >= 0 && tareas[i]) {
         e.preventDefault();
         setPropsTarea({ x: e.clientX, y: e.clientY, codigo: tareas[i].id });
       }
     },
-    [indiceDePunto, tareas],
+    [indiceDePunto, tareas, geometria],
   );
 
   const cerrarMenu = useCallback(() => setMenuAbierto(false), []);
@@ -634,6 +671,11 @@ function App() {
         });
         return;
       }
+    }
+    const tarea = tareasTodasRef.current.find((t) => t.linea === linea.number);
+    if (tarea) {
+      e.preventDefault();
+      setMenuTarea({ x: e.clientX, y: e.clientY, codigo: tarea.id, nombre: tarea.nombre });
     }
   }, []);
 
@@ -1093,6 +1135,46 @@ function App() {
           onCambiar={cambiarParametro}
           onRestablecer={restablecerParametros}
           onCerrar={cerrarMenu}
+        />
+      )}
+      {menuCalendario && (
+        <MenuCalendario
+          x={menuCalendario.x}
+          y={menuCalendario.y}
+          valores={parametros}
+          onCambiar={cambiarParametro}
+          onVerMas={() => {
+            setMenuCalendario(null);
+            setMenuAbierto(true);
+          }}
+          onCerrar={() => setMenuCalendario(null)}
+        />
+      )}
+      {menuColumnas && (
+        <MenuColumnas
+          x={menuColumnas.x}
+          y={menuColumnas.y}
+          valores={parametros}
+          onCambiar={cambiarParametro}
+          onVerMas={() => {
+            setMenuColumnas(null);
+            setMenuAbierto(true);
+          }}
+          onCerrar={() => setMenuColumnas(null)}
+        />
+      )}
+      {menuTarea && (
+        <MenuTarea
+          x={menuTarea.x}
+          y={menuTarea.y}
+          codigo={menuTarea.codigo}
+          nombre={menuTarea.nombre}
+          texto={texto}
+          copiado={copiado}
+          onCambiar={ponerEnEditor}
+          onCopia={setCopiado}
+          onAviso={setMensaje}
+          onCerrar={() => setMenuTarea(null)}
         />
       )}
       {menuProyectosAbierto && (

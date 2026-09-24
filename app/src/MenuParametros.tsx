@@ -39,6 +39,7 @@ interface FilaProps {
 }
 
 export function Fila({ p, valor, onCambiar, fallback }: FilaProps) {
+  const arr = Array.isArray(valor) ? (valor as string[]) : ((p.defecto as string[]) ?? []);
   switch (p.tipo) {
     case "color": {
       const hex = hexCompleto(String(valor));
@@ -159,17 +160,30 @@ export function Fila({ p, valor, onCambiar, fallback }: FilaProps) {
       return (
         <span className="param-control param-checks">
           {(p.columnas ?? []).map((c) => {
-            const activo = (valor as string[]).includes(c.clave);
+            const activo = arr.includes(c.clave);
             return (
-              <label key={c.clave}>
+              <label
+                key={c.clave}
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData("text/plain", c.clave)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  const origen = e.dataTransfer.getData("text/plain");
+                  const destino = c.clave;
+                  if (!origen || origen === destino) return;
+                  const nuevo = arr.filter((k) => k !== origen);
+                  const idx = nuevo.indexOf(destino);
+                  nuevo.splice(idx >= 0 ? idx + 1 : nuevo.length, 0, origen);
+                  onCambiar(nuevo);
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={activo}
                   onChange={(e) => {
-                    const actual = valor as string[];
-                    // al activar una columna queda siempre en primer lugar
+                    const actual = arr;
                     const nuevo = e.target.checked
-                      ? [c.clave, ...actual.filter((x) => x !== c.clave)]
+                      ? [...actual, c.clave]
                       : actual.filter((x) => x !== c.clave);
                     onCambiar(nuevo);
                   }}

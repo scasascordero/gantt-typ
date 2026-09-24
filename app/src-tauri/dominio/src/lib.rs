@@ -2,6 +2,7 @@ pub mod apu;
 pub mod cpm;
 pub mod db;
 pub mod excel;
+pub mod expr;
 pub mod exportar;
 pub mod fechas;
 pub mod importar;

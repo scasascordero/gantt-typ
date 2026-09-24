@@ -40,6 +40,19 @@ pub fn a_numero(v: &serde_yaml::Value) -> Option<f64> {
     }
 }
 
+// Número o fórmula aritmética (p. ej. "3*40"): primero intenta el número
+// plano y, si el valor es un texto no numérico, lo evalúa como expresión
+// (`cantidad` y `rendimiento` de los `recursos` del APU admiten fórmulas).
+pub fn a_numero_formula(v: &serde_yaml::Value) -> Option<f64> {
+    if let Some(n) = a_numero(v) {
+        return Some(n);
+    }
+    match v {
+        serde_yaml::Value::String(s) => crate::expr::evaluar(s).ok(),
+        _ => None,
+    }
+}
+
 pub fn campo<'a>(map: &'a serde_yaml::Mapping, clave: &str) -> Option<&'a serde_yaml::Value> {
     map.get(&serde_yaml::Value::String(clave.to_string()))
 }

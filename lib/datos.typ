@@ -23,6 +23,137 @@
   else { float(v) }
 }
 
+// Número o fórmula aritmética (p. ej. "3*40", "(12+8)/4", "9^0.5"). Se usa
+// en campos que admiten fórmulas (`cantidad` y `rendimiento` de los
+// `recursos` del APU). Evaluador propio con la misma gramática que
+// `expr.rs`/`expr.ts`: números, `+ - * / ^` (potencia asociativa a la
+// derecha), paréntesis y unarios. Devuelve `none` si la expresión no es
+// válida (no rompe la compilación de la carta).
+#let evaluar-formula(s) = {
+  let digitos = ("0","1","2","3","4","5","6","7","8","9")
+  let n = s.len()
+  let saltar = i => { let j = i; while j < n and (s.at(j) == " " or s.at(j) == "\t") { j += 1 }; j }
+  let es-digito = c => digitos.contains(c)
+
+  let numero(i) = {
+    let j = i
+    let v = 0.0
+    let escala = 1.0
+    let seen = false
+    while j < n {
+      let c = s.at(j)
+      if es-digito(c) {
+        seen = true
+        if escala == 1.0 { v = v * 10.0 + float(c) }
+        else { v = v + float(c) * escala; escala = escala / 10.0 }
+      } else if c == "." and escala == 1.0 {
+        escala = 0.1
+      } else { break }
+      j += 1
+    }
+    if seen { (v, j) } else { none }
+  }
+
+  let atomo = i => {
+    i = saltar(i)
+    if i >= n { none }
+    else if s.at(i) == "(" {
+      // Busca el ')' de cierre balanceado y evalúa el contenido recursivamente.
+      let prof = 1
+      let j = i + 1
+      while j < n {
+        if s.at(j) == "(" { prof += 1 }
+        else if s.at(j) == ")" { prof -= 1; if prof == 0 { break } }
+        j += 1
+      }
+      if prof != 0 { none }
+      else {
+        let interno = evaluar-formula(s.slice(i + 1, j))
+        if interno == none { none } else { (interno, j + 1) }
+      }
+    }
+    else { numero(i) }
+  }
+
+  let unario(i) = {
+    i = saltar(i)
+    if i >= n { none }
+    else if s.at(i) == "-" {
+      let r = unario(i + 1)
+      if r == none { none } else { let (v, j) = r; (-v, j) }
+    }
+    else if s.at(i) == "+" { unario(i + 1) }
+    else { atomo(i) }
+  }
+
+  let factor(i) = {
+    let b = unario(i)
+    if b == none { none }
+    else {
+      let (base, j) = b
+      j = saltar(j)
+      if j < n and s.at(j) == "^" {
+        let e = factor(j + 1)
+        if e == none { none } else { let (exp, k) = e; (calc.pow(base, exp), k) }
+      } else { (base, j) }
+    }
+  }
+
+  let termino(i) = {
+    let f = factor(i)
+    if f == none { none }
+    else {
+      let (v, j) = f
+      while true {
+        j = saltar(j)
+        if j < n and (s.at(j) == "*" or s.at(j) == "/") {
+          let op = s.at(j)
+          let g = factor(j + 1)
+          if g == none { return none }
+          let (w, k) = g
+          if op == "/" and w == 0.0 { return none }
+          v = if op == "*" { v * w } else { v / w }
+          j = k
+        } else { return (v, j) }
+      }
+    }
+  }
+
+  let expr(i) = {
+    let t = termino(i)
+    if t == none { none }
+    else {
+      let (v, j) = t
+      while true {
+        j = saltar(j)
+        if j < n and (s.at(j) == "+" or s.at(j) == "-") {
+          let op = s.at(j)
+          let t2 = termino(j + 1)
+          if t2 == none { return none }
+          let (w, k) = t2
+          v = if op == "+" { v + w } else { v - w }
+          j = k
+        } else { return (v, j) }
+      }
+    }
+  }
+
+  let r = expr(0)
+  if r == none { none }
+  else {
+    let (v, j) = r
+    if saltar(j) == n { float(v) } else { none }
+  }
+}
+
+#let a-formula(v) = {
+  if es-vacio(v) { none }
+  else if type(v) == str {
+    let s = v.trim()
+    if s.len() == 0 { none } else { evaluar-formula(s) }
+  } else { a-numero(v) }
+}
+
 // Convierte a día juliano un valor que puede ser una fecha ("AAAA-MM-DD",
 // como llega de yaml()/csv()) o directamente un número entero de día (para
 // usuarios avanzados que trabajan con la aritmética interna de la librería).
@@ -241,9 +372,9 @@
     recursos
   }
   let cuotas = lista.map(r => {
-    let cantidad = a-numero(r.at("cantidad", default: none))
+    let cantidad = a-formula(r.at("cantidad", default: none))
     let precio = a-numero(r.at("precio", default: none))
-    let rendimiento = a-numero(r.at("rendimiento", default: none))
+    let rendimiento = a-formula(r.at("rendimiento", default: none))
     if cantidad == none or precio == none { 0.0 } else {
       let divisor = if rendimiento == none or rendimiento <= 0.0 { 1.0 } else { rendimiento }
       cantidad * precio / divisor
@@ -270,7 +401,7 @@
     let av = interpretar-avance(item.at("avance", default: none))
     // Costos: `cantidad` x `costo-unitario` = `costo`; un `costo` explícito
     // manda sobre el producto. `unidad` es solo texto descriptivo.
-    let cantidad = a-numero(item.at("cantidad", default: none))
+    let cantidad = a-formula(item.at("cantidad", default: none))
     let cu-expl = a-numero(item.at("costo-unitario", default: none))
     let cu = if cu-expl != none { cu-expl } else { precio-unitario-de-recursos(item) }
     let costo-expl = a-numero(item.at("costo", default: none))
@@ -327,7 +458,7 @@
     (
       inicio-dias: inicio-dias, termino-dias: termino-dias, duracion: duracion,
       avance: avance, avance-serie: avance-serie,
-      cantidad: a-numero(item.at("cantidad", default: none)),
+      cantidad: a-formula(item.at("cantidad", default: none)),
       unidad: item.at("unidad", default: none),
       costo-unitario: a-numero(item.at("costo-unitario", default: none)),
       costo: costo,

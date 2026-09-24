@@ -5,6 +5,7 @@
 
 import { parseDocument, isMap, isSeq } from "yaml";
 import { inconsistenciasFechas } from "./yamlEdicion.ts";
+import { numeroOFormula } from "./expr.ts";
 
 export interface Diagnostico {
   linea: number; // 1-based
@@ -134,18 +135,31 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
         }
       }
 
-      // `recursos` (APU): cada recurso necesita cantidad y precio numericos
+      // `recursos` (APU): cada recurso necesita cantidad y precio (numéricos o
+      // fórmulas); `rendimiento`, si está, también debe evaluar a un número.
       const recursos = datos.recursos;
       if (recursos != null) {
         const listaR = Array.isArray(recursos) ? recursos : Object.values(recursos as object);
-        const malos = listaR.filter(
+        const sinCampos = listaR.filter(
           (r): r is Record<string, unknown> =>
             r != null && typeof r === "object" && ((r as Record<string, unknown>).cantidad == null || (r as Record<string, unknown>).precio == null),
         );
-        if (malos.length > 0) {
+        const conCamposNoEvaluables = listaR.filter((r) => {
+          if (r == null || typeof r !== "object") return false;
+          const obj = r as Record<string, unknown>;
+          return (obj.cantidad != null && numeroOFormula(obj.cantidad) == null) || (obj.rendimiento != null && obj.rendimiento !== "" && numeroOFormula(obj.rendimiento) == null);
+        });
+        if (sinCampos.length > 0) {
           d.push({
             linea,
-            mensaje: `'${clave}': ${malos.length} recurso(s) del APU sin 'cantidad' ni 'precio'`,
+            mensaje: `'${clave}': ${sinCampos.length} recurso(s) del APU sin 'cantidad' ni 'precio'`,
+            severidad: "aviso",
+          });
+        }
+        if (conCamposNoEvaluables.length > 0) {
+          d.push({
+            linea,
+            mensaje: `'${clave}': ${conCamposNoEvaluables.length} recurso(s) con 'cantidad' o 'rendimiento' que no evaluan a un numero o formula valida (ej: "3*40", "(8+4)/2")`,
             severidad: "aviso",
           });
         }

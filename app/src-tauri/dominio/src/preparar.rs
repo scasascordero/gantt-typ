@@ -21,6 +21,10 @@ fn a_numero_o(v: Option<&serde_yaml::Value>) -> Option<f64> {
     }
 }
 
+fn a_numero_formula_o(v: Option<&serde_yaml::Value>) -> Option<f64> {
+    v.and_then(|val| a_numero_formula(val))
+}
+
 fn a_bool_o(v: Option<&serde_yaml::Value>) -> Option<bool> {
     match v {
         Some(serde_yaml::Value::Bool(b)) => Some(*b),
@@ -67,7 +71,7 @@ fn resolver_hoja(
     }
 
     let av = interpretar_avance(campo(&item.map, "avance").unwrap_or(&serde_yaml::Value::Null));
-    let cantidad = a_numero_o(campo(&item.map, "cantidad"));
+    let cantidad = a_numero_formula_o(campo(&item.map, "cantidad"));
     // costo-unitario explícito manda; si no, sale del APU (recursos x
     // rendimiento), mismo cálculo que precio-unitario-de-recursos (datos.typ).
     let cu = a_numero_o(campo(&item.map, "costo-unitario"))
@@ -184,7 +188,7 @@ fn resolver_grupo(
         termino_dias,
         duracion,
         avance,
-        cantidad: a_numero_o(campo(&item.map, "cantidad")),
+        cantidad: a_numero_formula_o(campo(&item.map, "cantidad")),
         unidad: match campo(&item.map, "unidad") {
             Some(v) if !es_vacio(v) => Some(v.as_str().unwrap_or("").to_string()),
             _ => None,

@@ -6,7 +6,7 @@
 
 use serde::Serialize;
 
-use crate::modelo::{aplanar, campo, construir_indice, es_vacio, a_numero, ItemCrudo};
+use crate::modelo::{aplanar, campo, construir_indice, es_vacio, a_numero, a_numero_formula, ItemCrudo};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,7 +36,7 @@ pub struct ApuAnalisis {
 pub fn analizar_recursos(valor: &serde_yaml::Value) -> Vec<RecursoApu> {
     use serde_yaml::Value;
     let extraer = |m: &serde_yaml::Mapping, clave: &str| -> Option<f64> {
-        a_numero(campo(m, clave).unwrap_or(&Value::Null))
+        a_numero_formula(campo(m, clave).unwrap_or(&Value::Null))
     };
     let cuota_de = |cantidad: f64, precio: f64, rendimiento: f64| -> f64 {
         let rend = if rendimiento > 0.0 { rendimiento } else { 1.0 };
@@ -122,7 +122,7 @@ pub fn analizar(texto: &str, codigo: &str) -> Option<ApuAnalisis> {
         return None;
     }
     let costo_unitario = recursos.iter().map(|r| r.cuota).sum::<f64>();
-    let cantidad = a_numero(campo(&item.map, "cantidad").unwrap_or(&serde_yaml::Value::Null));
+    let cantidad = a_numero_formula(campo(&item.map, "cantidad").unwrap_or(&serde_yaml::Value::Null));
     let costo = cantidad.map(|c| c * costo_unitario);
     let nombre = match campo(&item.map, "nombre") {
         Some(serde_yaml::Value::String(s)) => s.clone(),
@@ -206,6 +206,44 @@ tareas:
         let pu = precio_unitario(&item_12["recursos"]).unwrap();
         // 0.25*32000/2 = 4000
         assert!((pu - 4000.0).abs() < 1e-9, "pu = {pu}");
+    }
+
+    #[test]
+    fn analizar_con_formulas() {
+        let yaml = r#"
+tareas:
+  - codigo: "9"
+    nombre: Partida fórmula
+    subtareas:
+      - codigo: "9.1"
+        nombre: Enfierradura
+        inicio: 2026-03-02
+        duracion: 10
+        unidad: m3
+        cantidad: "3*40"
+        recursos:
+          - tipo: mano-obra
+            nombre: Armador
+            cantidad: "0.05*2"
+            rendimiento: "6/3"
+            precio: 45000
+          - tipo: material
+            nombre: Fierro
+            cantidad: 95
+            rendimiento: 1
+            precio: 1350
+"#;
+        let a = analizar(yaml, "9.1").expect("9.1");
+        // cantidad 3*40 = 120
+        assert_eq!(a.cantidad, Some(120.0));
+        // cuota Armador = 0.05*2=0.1 * 45000 / (6/3=2) = 2250
+        assert!((a.recursos[0].cuota - 2250.0).abs() < 1e-9, "cuota armador = {}", a.recursos[0].cuota);
+        // cuota Fierro = 95*1350/1
+        assert!((a.recursos[1].cuota - 128250.0).abs() < 1e-9);
+        // costo_unitario = 2250 + 128250
+        assert!((a.costo_unitario - 130500.0).abs() < 1e-9, "cu = {}", a.costo_unitario);
+        // costo = 120 * 130500
+        assert_eq!(a.costo, Some(15_660_000.0));
     }
 
     #[test]

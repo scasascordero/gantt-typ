@@ -168,10 +168,11 @@ obligatorias en una tarea sin subtareas):
 | `italica`      | `true`/`false` — cursiva para el texto de esta fila |
 | `color-texto`  | `"#rrggbb"` — color del texto de esta fila (nombre, celdas de fechas y duración) |
 | `ocultar-subtareas` | `true` — no dibuja el subárbol de esta actividad (independiente de `mostrar-niveles`); sus fechas/avance/costos siguen siendo el rollup completo |
-| `cantidad`     | número de unidades (para el cálculo de costo) |
+| `cantidad`     | número de unidades (para el cálculo de costo). Acepta **fórmulas** aritméticas: `"3*40"`, `"(12+8)/2"`, `"2^5"` — se evalúan (`+ - * / ^` y paréntesis) antes de calcular el costo |
 | `unidad`       | texto descriptivo de la unidad (`"m3"`, `"ha"`, `"lp"`…) |
 | `costo-unitario` | precio por unidad |
 | `costo`        | se calcula como `cantidad × costo-unitario`; un `costo` explícito manda. En actividades con subtareas, el `costo` es la **suma de las hijas** (acumulable por niveles). Visible con la columna `costo` |
+| `recursos`     | descomposición del precio unitario (APU): lista de mapas **o** diccionario clave→mapa con `cantidad`, `precio` y opcional `medida`, `tipo`, `rendimiento`. Cuota = `cantidad × precio ÷ rendimiento` (rendimiento 1 por defecto). `cantidad` y `rendimiento` aceptan fórmulas; el `costo-unitario` explícito manda sobre el APU |
 
 ### Configuración dentro del archivo: `config:`
 

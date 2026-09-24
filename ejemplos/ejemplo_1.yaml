@@ -1,4 +1,13 @@
-# Proyecto: construcción de centro de distribución — 32 actividades, 4 niveles
+# Proyecto: construcción de centro de distribución — 32 actividades, 4 niveles.
+# Las tareas de la estructura de hormigón (3.3.1 y 3.3.2) muestran el módulo
+# de análisis de precios unitarios: `recursos` con cantidad, precio y
+# rendimiento; el costo-unitario se calcula automáticamente y las columnas
+# "C. unitario" y "Costo" lo exponen en la carta.
+# Los campos `cantidad` y `rendimiento` aceptan fórmulas aritméticas
+# (p. ej. "0.04*2", "160*2", "6/3"): se evalúan antes de calcular las cuotas.
+config:
+  titulo: "Centro de distribución — con análisis de precios unitarios (APU)"
+  mostrar-columnas: [duracion, costo-unitario, costo]
 tareas:
   - codigo: "0"
     nombre: Proyecto centro de distribución
@@ -91,11 +100,106 @@ tareas:
                 inicio: 2026-07-04
                 duracion: 25
                 avance: 0.5
+                unidad: m3
+                cantidad: 180
+                # APU de ejemplo: el costo-unitario sale de las cuotas de los
+                # recursos (cantidad x precio / rendimiento).
+                recursos:
+                  - tipo: mano-obra
+                    nombre: Armador de fierro (jornada)
+                    cantidad: 0.35
+                    rendimiento: 1
+                    precio: 62000
+                  - tipo: mano-obra
+                    nombre: Maestro (jornada)
+                    cantidad: 0.15
+                    rendimiento: 1
+                    precio: 78000
+                  - tipo: mano-obra
+                    nombre: Ayudante (jornada)
+                    cantidad: 0.4
+                    rendimiento: 1
+                    precio: 36000
+                  - tipo: material
+                    nombre: Hormigón H-35 (m3)
+                    cantidad: 1.05
+                    rendimiento: 1
+                    precio: 95000
+                  - tipo: material
+                    nombre: Fierro de refuerzo (kg)
+                    cantidad: 95
+                    rendimiento: 1
+                    precio: 1350
+                  - tipo: material
+                    nombre: Moldaje de madera (m2)
+                    cantidad: 6
+                    rendimiento: 1
+                    precio: 4200
+                  - tipo: equipo
+                    nombre: Grúa autocargante (hora)
+                    cantidad: "0.04*2"
+                    rendimiento: "2/2"
+                    precio: 72000
+                  - tipo: equipo
+                    nombre: Vibrador de inmersión (hora)
+                    cantidad: "1/10"
+                    rendimiento: 1
+                    precio: 9500
               - codigo: "3.3.2"
                 nombre: Losas y vigas
                 inicio: 2026-07-29
                 duracion: 35
                 avance: 0.1
+                unidad: m3
+                cantidad: "160*2"
+                # Los valores siguen siendo los mismos: 320 m3, con fórmulas
+                # en cantidad y en el rendimiento de algunos recursos.
+                recursos:
+                  - tipo: mano-obra
+                    nombre: Maestro (jornada)
+                    cantidad: 0.12
+                    rendimiento: 1
+                    precio: 78000
+                  - tipo: mano-obra
+                    nombre: Armador de fierro (jornada)
+                    cantidad: 0.28
+                    rendimiento: 1
+                    precio: 62000
+                  - tipo: mano-obra
+                    nombre: Carpintero de moldajes (jornada)
+                    cantidad: 0.1
+                    rendimiento: 1
+                    precio: 65000
+                  - tipo: mano-obra
+                    nombre: Ayudante (jornada)
+                    cantidad: 0.35
+                    rendimiento: 1
+                    precio: 36000
+                  - tipo: material
+                    nombre: Hormigón H-35 (m3)
+                    cantidad: 1.06
+                    rendimiento: 1
+                    precio: 95000
+                  - tipo: material
+                    nombre: Fierro de refuerzo (kg)
+                    cantidad: 88
+                    rendimiento: 1
+                    precio: 1350
+                  - tipo: material
+                    nombre: Moldaje metálico (m2)
+                    cantidad: 2.8
+                    rendimiento: 1
+                    precio: 6800
+                  - tipo: equipo
+                    nombre: Bomba de hormigón (hora)
+                    cantidad: "1/20"
+                    rendimiento: 1
+                    precio: 118000
+                  - tipo: equipo
+                    nombre: Vibrador de inmersión (hora)
+                    cantidad: 0.1
+                    rendimiento: 1
+                    precio: 9500
           - codigo: "3.4"
             nombre: Cerramientos y cubierta
             inicio: 2026-09-02

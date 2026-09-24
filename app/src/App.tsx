@@ -14,7 +14,7 @@ import { prepararProyecto, fechaIso, type Fila } from "./lib/proyecto";
 import { aMSPDI, aPMXML, aXER } from "./lib/exportadores";
 import { desdeMSPDI, esMSPDI } from "./lib/mspdi";
 import { excelAYaml, detectarColumnas, type ColumnasExcel, type Deteccion, type MatrizExcel } from "./lib/excelImport";
-import { editarCampo, leerCampo, leerConfigYaml, ponerConfigYaml, type ValorCampo } from "./lib/yamlEdicion";
+import { editarCampo, editarCampoConsistente, leerCampo, leerConfigYaml, ponerConfigYaml, type ValorCampo } from "./lib/yamlEdicion";
 import { editarPredecesoras } from "./lib/yamlOperaciones";
 import EditorPredecesoras from "./EditorPredecesoras";
 import MenuCalendario from "./MenuCalendario";
@@ -534,12 +534,29 @@ function App() {
     (clave: string, valor: ValorCampo) => {
       if (!propsTarea) return;
       try {
-        ponerEnEditor(editarCampo(textoRef.current, propsTarea.codigo, clave, valor));
+        ponerEnEditor(editarCampoConsistente(textoRef.current, propsTarea.codigo, clave, valor));
       } catch (err) {
         setMensaje(`Error al editar: ${String(err)}`);
       }
     },
     [propsTarea, ponerEnEditor],
+  );
+
+  // Aviso de fechas/duración incoherentes editadas a mano en el YAML: con un
+  // clic se corrige sola la `duracion` (el `termino` queda como ancla).
+  const corregirInconsistencia = useCallback(
+    (codigo: string, duracionCalculada: number) => {
+      try {
+        const corregido = editarCampo(textoRef.current, codigo, "duracion", duracionCalculada);
+        if (corregido !== textoRef.current) {
+          ponerEnEditor(corregido);
+          setMensaje(`'${codigo}': duración ajustada a ${duracionCalculada} (término inalterado)`);
+        }
+      } catch (err) {
+        setMensaje(`Error al corregir: ${String(err)}`);
+      }
+    },
+    [ponerEnEditor],
   );
 
   const abrirPredecesoras = useCallback((codigoTarea: string, nombreTarea: string) => {
@@ -1437,9 +1454,13 @@ function App() {
           {diagnosticos.slice(0, 12).map((d, i) => (
             <button
               key={i}
-              className={`diag diag-${d.severidad}`}
-              onClick={() => irALinea(d.linea)}
-              title="Mostrar el YAML en esa línea"
+              className={`diag diag-${d.severidad}${d.correccion ? " diag-corregible" : ""}`}
+              onClick={
+                d.correccion
+                  ? () => corregirInconsistencia(d.correccion!.codigo, d.correccion!.duracionCalculada)
+                  : () => irALinea(d.linea)
+              }
+              title={d.correccion ? "Corregir la duración para que coincida con el término" : "Mostrar el YAML en esa línea"}
             >
               <span className="diag-linea">{d.linea}</span>
               <span className="diag-texto">{d.mensaje}</span>

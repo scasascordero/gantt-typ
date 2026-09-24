@@ -4,6 +4,7 @@
 // Devuelve diagnósticos con número de línea para mostrarlos en la UI.
 
 import { parseDocument, isMap, isSeq } from "yaml";
+import { inconsistenciasFechas } from "./yamlEdicion.ts";
 
 export interface Diagnostico {
   linea: number; // 1-based
@@ -12,6 +13,9 @@ export interface Diagnostico {
   // presente solo en el diagnóstico de id repetido: referencia a la tarea
   // duplicada (la segunda ocurrencia) para que la app la renombre sola.
   repetido?: { id: string; codigo: string };
+  // presente en avisos de fechas/duración inconsistentes: la app puede
+  // corregir sola la `duracion` dejando el `termino` como ancla.
+  correccion?: { codigo: string; duracionCalculada: number };
 }
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -187,6 +191,17 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
         });
       }
     }
+  }
+
+  for (const inc of inconsistenciasFechas(texto)) {
+    d.push({
+      linea: inc.linea,
+      mensaje:
+        `'${inc.codigo}' tiene 'termino' ${inc.termino} que no coincide con duracion ${inc.duracion}: ` +
+        `duracion ${inc.duracionCalculada} (si vale el termino) o termino ${inc.terminoCalculado} (si vale la duracion)`,
+      severidad: "aviso",
+      correccion: { codigo: inc.codigo, duracionCalculada: inc.duracionCalculada },
+    });
   }
 
   return d.sort((a, b) => a.linea - b.linea);

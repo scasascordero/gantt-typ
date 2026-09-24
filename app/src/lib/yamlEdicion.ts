@@ -4,7 +4,11 @@
 
 import { parseDocument, isMap, isSeq, isPair, isScalar, type Document, type Node, type Pair, type YAMLMap, type YAMLSeq } from "yaml";
 
+import { aDias, aNumero, fechaIso } from "./proyecto.ts";
+
 export type ValorCampo = string | number | boolean | null;
+
+const ES_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 // encuentra el mapa de la tarea con `codigo`, recorriendo en el mismo order
 // de aplanado que la librería (codigo propio y luego subtareas)
@@ -111,6 +115,120 @@ export function editarCampo(texto: string, codigo: string, clave: string, valor:
   const kLineStart = texto.lastIndexOf("\n", kStart - 1) + 1;
   const indent = sangria(texto.slice(kLineStart, kStart));
   return texto.slice(0, lineEnd) + `\n${indent}${clave}: ${serializar(valor)}` + texto.slice(lineEnd);
+}
+
+// --- consistencia fechas/duración -----------------------------------------
+
+// Cuando una tarea hoja declara `inicio` y `termino`/`duracion`, ambos deben
+// ser coherentes (término = inicio + duración - 1, como resuelve la librería).
+// Al editar un campo se recalcula el otro para mantener el documento válido:
+// - `termino`  -> duración = término - inicio + 1
+// - `duracion` -> término  = inicio + duración - 1
+// - `inicio`   -> arrastra el término si hay duración propia; si solo hay
+//                 término explícito, recalcula la duración (fecha fija como
+//                 ancla). Los grupos (con `subtareas`) no se tocan: sus fechas
+//                 salen del rollup de las hijas.
+export function editarCampoConsistente(texto: string, codigo: string, clave: string, valor: ValorCampo): string {
+  let resultado = editarCampo(texto, codigo, clave, valor);
+  if (clave !== "inicio" && clave !== "termino" && clave !== "duracion") return resultado;
+  if (esVacio(valor)) return resultado;
+
+  const doc = parseDocument(resultado);
+  const nodo = hallarNodo(doc, codigo);
+  if (!nodo) return resultado;
+  if (isSeq(nodo.get("subtareas", true))) return resultado;
+
+  const lee = (key: string): unknown => {
+    for (const pair of nodo.items) {
+      if (isPair(pair) && String(pair.key) === key && isScalar(pair.value)) return pair.value.value;
+    }
+    return undefined;
+  };
+  const escribir = (key: string, v: ValorCampo): void => {
+    resultado = editarCampo(resultado, codigo, key, v);
+  };
+
+  const aDia = (v: unknown): number | null =>
+    typeof v === "string" && ES_FECHA.test(v) ? aDias(v) : null;
+
+  const dInicio = aDia(clave === "inicio" ? valor : lee("inicio"));
+  if (dInicio == null) return resultado;
+
+  if (clave === "termino") {
+    const dTerm = aDia(valor);
+    if (dTerm != null) escribir("duracion", dTerm - dInicio + 1);
+  } else if (clave === "duracion") {
+    const dur = aNumero(valor, null);
+    if (dur != null && Number.isFinite(dur)) escribir("termino", fechaIso(dInicio + Math.max(1, Math.trunc(dur)) - 1));
+  } else {
+    const dur = aNumero(lee("duracion"), null);
+    if (dur != null && Number.isFinite(dur)) {
+      escribir("termino", fechaIso(dInicio + Math.max(1, Math.trunc(dur)) - 1));
+    } else {
+      const dTerm = aDia(lee("termino"));
+      if (dTerm != null) escribir("duracion", dTerm - dInicio + 1);
+    }
+  }
+  return resultado;
+}
+
+// Detecta las tareas hoja cuyo `termino` no coincide con `inicio + duracion - 1`
+// y entrega ambos valores corregidos (duración), para mostrarlos en la UI
+// durante la edición directa del YAML y poder aplicar la corrección con un clic.
+export interface InconsistenciaFechas {
+  codigo: string;
+  inicio: string;
+  duracion: number;
+  termino: string;
+  duracionCalculada: number;
+  terminoCalculado: string;
+  linea: number;
+}
+
+export function inconsistenciasFechas(texto: string): InconsistenciaFechas[] {
+  const doc = parseDocument(texto);
+  const raiz = doc.get("tareas", true);
+  if (!isSeq(raiz)) return [];
+  const salida: InconsistenciaFechas[] = [];
+  const visitar = (seq: YAMLSeq): void => {
+    for (const item of seq.items) {
+      if (!isMap(item)) continue;
+      const sub = item.get("subtareas", true);
+      if (isSeq(sub)) {
+        visitar(sub);
+        continue;
+      }
+      const lee = (key: string): unknown => {
+        for (const pair of item.items) {
+          if (isPair(pair) && String(pair.key) === key && isScalar(pair.value)) return pair.value.value;
+        }
+        return undefined;
+      };
+      const codigo = String(item.get("codigo", true) ?? "");
+      const inicio = lee("inicio");
+      const duracion = lee("duracion");
+      const termino = lee("termino");
+      if (typeof inicio !== "string" || !ES_FECHA.test(inicio)) continue;
+      if (typeof duracion !== "number" || !Number.isFinite(duracion)) continue;
+      if (typeof termino !== "string" || !ES_FECHA.test(termino)) continue;
+      const dIni = aDias(inicio)!;
+      const dTer = aDias(termino)!;
+      if (dTer === dIni + Math.max(1, Math.trunc(duracion)) - 1) continue;
+      const p = (item.items as Pair[]).find((x) => isPair(x) && String(x.key) === "termino");
+      const pos = p ? (p.value && (p.value as Node).range ? ((p.value as Node).range![0] as number) : ((p.key as Node).range?.[0] ?? 0)) : 0;
+      salida.push({
+        codigo,
+        inicio,
+        duracion,
+        termino,
+        duracionCalculada: dTer - dIni + 1,
+        terminoCalculado: fechaIso(dIni + Math.max(1, Math.trunc(duracion)) - 1),
+        linea: texto.slice(0, pos).split("\n").length,
+      });
+    }
+  };
+  visitar(raiz);
+  return salida;
 }
 
 // --- sección `config:` del YAML -> valores para el menú de parámetros ------

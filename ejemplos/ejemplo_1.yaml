@@ -27,7 +27,7 @@ tareas:
                 nombre: Anteproyecto
                 inicio: 2026-01-25
                 duracion: 25
-                avance: ["50%", "40%"]
+                avance: 0.9
               - codigo: "1.2.2"
                 nombre: Ajustes al anteproyecto
                 inicio: 2026-02-19
@@ -64,7 +64,7 @@ tareas:
             nombre: Permiso de edificación
             inicio: 2026-03-15
             duracion: 45
-            avance: [0.2, 0.25, 0.15]
+            avance: 0.6
           - codigo: "2.2"
             nombre: Licitación del contratista
             inicio: 2026-04-05

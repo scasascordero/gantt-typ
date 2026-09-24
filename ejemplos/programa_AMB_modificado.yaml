@@ -1,0 +1,115 @@
+# Programa de Análisis Ambiental (rango Programa_AMB de datos_para_gantt_AMB.xlsx)
+config:
+  titulo: "Nuevo Análisis Ambiental Embalse Las Palmas - Reprogramación"
+  mostrar-columnas: ["inicio", "termino"]
+  nivel-semana: true
+  mostrar-dia-inicio-semana: true
+tareas:
+  - codigo: "0"
+    nombre: "FIRMA DE CONTRATO (13-jul-2026)"
+    hito: true
+    inicio: 2026-07-13
+    termino: 2026-07-13
+  - codigo: "1"
+    nombre: "FASE 1. Inicio y análisis preliminar"
+    subtareas:
+    - codigo: "1.1"
+      nombre: "Revisión de antecedentes y RCA"
+      inicio: 2026-07-13
+      termino: 2026-09-13
+      duracion: 62
+    - codigo: "1.2"
+      nombre: "Análisis regulatorio preliminar"
+      inicio: 2026-07-13
+      termino: 2026-09-13
+      duracion: 62
+    - codigo: "1.3"
+      nombre: "Planificación de campañas"
+      inicio: 2026-09-08
+      termino: 2026-09-21
+      duracion: 31
+  - codigo: "2"
+    nombre: "FASE 2. Campaña N°1 y análisis preliminar"
+    subtareas:
+    - codigo: "2.1"
+      nombre: "Campaña primavera"
+      inicio: 2026-10-19
+      termino: 2026-10-23
+      duracion: 61
+    - codigo: "2.2"
+      nombre: "Procesamiento campaña N°1"
+      inicio: 2026-10-26
+      termino: 2026-11-26
+      duracion: 61
+    - codigo: "2.3"
+      nombre: "Evaluación preliminar componentes ambientales"
+      inicio: 2026-10-26
+      termino: 2026-11-26
+      duracion: 61
+  - codigo: "3"
+    nombre: "FASE 3. Campaña N°2 y versión preliminar"
+    subtareas:
+    - codigo: "3.1"
+      nombre: "Campaña verano"
+      inicio: 2027-01-11
+      termino: 2027-01-15
+      duracion: 61
+    - codigo: "3.2"
+      nombre: "Procesamiento campaña N°2"
+      inicio: 2027-01-16
+      termino: 2027-02-05
+      duracion: 92
+    - codigo: "3.3"
+      nombre: "Cartografía y análisis territorial"
+      inicio: 2026-09-28
+      termino: 2027-02-05
+      duracion: 122
+  - codigo: "4"
+    nombre: "FASE 4. Informe integrado"
+    subtareas:
+    - codigo: "4.1"
+      nombre: "Análisis sensibilidad ambiental"
+      inicio: 2026-10-13
+      termino: 2027-01-13
+      duracion: 92
+    - codigo: "4.2"
+      nombre: "Evaluación Art. 11 Ley 19.300"
+      inicio: 2026-11-13
+      termino: 2027-01-13
+      duracion: 61
+    - codigo: "4.3"
+      nombre: "Informe Integrado de Caracterización"
+      inicio: 2026-12-13
+      termino: 2027-01-13
+      duracion: 31
+  - codigo: "5"
+    nombre: "FASE 5. Informe Técnico y estrategia ambiental"
+    subtareas:
+    - codigo: "5.1"
+      nombre: "Determinación vía de ingreso al SEIA"
+      inicio: 2026-11-13
+      termino: 2027-01-13
+      duracion: 61
+    - codigo: "5.2"
+      nombre: "Optimización de diseño"
+      inicio: 2026-11-13
+      termino: 2027-02-13
+      duracion: 92
+    - codigo: "5.3"
+      nombre: "Informe Técnico Final"
+      inicio: 2026-12-13
+      termino: 2027-02-13
+      duracion: 62
+  - codigo: "6"
+    nombre: "FASE 6. Cierre"
+    subtareas:
+    - codigo: "6.1"
+      nombre: "Versión final y antecedentes para ingreso"
+      inicio: 2027-02-13
+      termino: 2027-03-13
+      duracion: 28
+    - codigo: "6.2"
+      nombre: "ENTREGA AL MOP (14-abr-2027)"
+      hito: true
+      inicio: 2027-04-14
+      termino: 2027-04-14

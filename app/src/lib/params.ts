@@ -217,6 +217,7 @@ export const PARAMETROS: ParamDef[] = [
     tipo: "columnas",
     columnas: COLUMNAS,
     defecto: ["inicio", "termino", "duracion", "avance"],
+    ayuda: "Subconjunto y orden de las columnas de datos. Seleccioná un nombre y movelo con las flechas ↑ ↓. Las desmarcadas quedan en su lugar.",
   },
 
   // --- CPM y vínculos ----------------------------------------------------------

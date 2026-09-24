@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { PARAMETROS, type ParamDef, type Valor } from "./lib/params";
 
 interface Props {
@@ -39,7 +39,6 @@ interface FilaProps {
 }
 
 export function Fila({ p, valor, onCambiar, fallback }: FilaProps) {
-  const arr = Array.isArray(valor) ? (valor as string[]) : ((p.defecto as string[]) ?? []);
   switch (p.tipo) {
     case "color": {
       const hex = hexCompleto(String(valor));
@@ -157,44 +156,110 @@ export function Fila({ p, valor, onCambiar, fallback }: FilaProps) {
       );
     }
     case "columnas":
-      return (
-        <span className="param-control param-checks">
-          {(p.columnas ?? []).map((c) => {
-            const activo = arr.includes(c.clave);
-            return (
-              <label
-                key={c.clave}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData("text/plain", c.clave)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  const origen = e.dataTransfer.getData("text/plain");
-                  const destino = c.clave;
-                  if (!origen || origen === destino) return;
-                  const nuevo = arr.filter((k) => k !== origen);
-                  const idx = nuevo.indexOf(destino);
-                  nuevo.splice(idx >= 0 ? idx + 1 : nuevo.length, 0, origen);
-                  onCambiar(nuevo);
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={activo}
-                  onChange={(e) => {
-                    const actual = arr;
-                    const nuevo = e.target.checked
-                      ? [...actual, c.clave]
-                      : actual.filter((x) => x !== c.clave);
-                    onCambiar(nuevo);
-                  }}
-                />{" "}
-                {c.etiqueta}
-              </label>
-            );
-          })}
-        </span>
-      );
+      return <ControlesColumnas p={p} valor={valor} onCambiar={onCambiar} />;
   }
+}
+
+// Selección + orden de columnas de datos. La lista mantiene un orden fijo de
+// todas las columnas: al desmarcar una se atenúa pero queda en su lugar (al
+// reactivarla vuelve a la misma posición). Las flechas ↑ ↓ de arriba mueven la
+// columna seleccionada dentro de ese orden.
+function ControlesColumnas({ p, valor, onCambiar }: FilaProps) {
+  const catalogo = p.columnas ?? [];
+  const activas = Array.isArray(valor)
+    ? (valor as string[]).filter((clave) => catalogo.some((c) => c.clave === clave))
+    : (p.defecto as string[]) ?? [];
+  const resto = catalogo.filter((c) => !activas.includes(c.clave)).map((c) => c.clave);
+  const [orden, setOrden] = useState<string[]>(() => [...activas, ...resto]);
+  const [seleccion, setSeleccion] = useState<string | null>(orden[0] ?? null);
+  const etiqueta = (clave: string) =>
+    catalogo.find((c) => c.clave === clave)?.etiqueta ?? clave;
+
+  // Adopta cambios externos del orden (p. ej. "Restablecer" o edición del
+  // YAML) sin romper el orden local que conserva las desactivadas en su lugar.
+  const ultimoActivas = useRef(activas);
+  useEffect(() => {
+    if (ultimoActivas.current === activas) return;
+    ultimoActivas.current = activas;
+    const restriccion = orden.filter((c) => activas.includes(c));
+    if (restriccion.join("\u0000") !== activas.join("\u0000")) {
+      setOrden([...activas, ...resto]);
+    }
+  });
+
+  const mover = (delta: number) => {
+    if (!seleccion) return;
+    const idx = orden.indexOf(seleccion);
+    const dest = idx + delta;
+    if (idx < 0 || dest < 0 || dest >= orden.length) return;
+    const nuevo = [...orden];
+    [nuevo[idx], nuevo[dest]] = [nuevo[dest], nuevo[idx]];
+    setOrden(nuevo);
+    onCambiar(nuevo.filter((c) => activas.includes(c)));
+  };
+
+  const cambiarActiva = (clave: string, activo: boolean) => {
+    if (activo) {
+      setSeleccion(clave);
+      onCambiar(orden.filter((c) => activas.includes(c) || c === clave));
+    } else {
+      if (seleccion === clave) setSeleccion(null);
+      onCambiar(orden.filter((c) => activas.includes(c) && c !== clave));
+    }
+  };
+
+  const idxSel = seleccion ? orden.indexOf(seleccion) : -1;
+
+  return (
+    <span className="param-control col-orden-bloque">
+      <span
+        className="col-flechas-cabecera"
+        title="Seleccioná una columna y usá las flechas para ordenarla"
+      >
+        <button
+          type="button"
+          disabled={idxSel <= 0}
+          onClick={() => mover(-1)}
+          aria-label="Mover columna seleccionada arriba"
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          disabled={idxSel < 0 || idxSel >= orden.length - 1}
+          onClick={() => mover(1)}
+          aria-label="Mover columna seleccionada abajo"
+        >
+          ↓
+        </button>
+      </span>
+      <span className="param-checks col-orden">
+        {orden.map((clave) => {
+          const activo = activas.includes(clave);
+          const clases = ["col-item", activo ? "col-activa" : "col-inactiva"];
+          if (seleccion === clave) clases.push("col-seleccion");
+          return (
+            <span
+              key={clave}
+              className={clases.join(" ")}
+              onClick={(e) => {
+                if ((e.target as HTMLElement).closest("input")) return;
+                e.preventDefault();
+                setSeleccion(clave);
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={activo}
+                onChange={(e) => cambiarActiva(clave, e.target.checked)}
+              />
+              <span className="col-nombre">{etiqueta(clave)}</span>
+            </span>
+          );
+        })}
+      </span>
+    </span>
+  );
 }
 
 export default function MenuParametros({ valores, ventanaCalculada, onCambiar, onRestablecer, onCerrar }: Props) {

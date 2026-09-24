@@ -45,7 +45,7 @@ export default function MenuColumnas({ x, y, valores, onCambiar, onVerMas, onCer
             </label>
           )}
           <div className="menu-columna-ayuda">
-            Marca las columnas que quieres que la carta muestre junto a las bandas.
+            Marca las columnas que quieres que la carta muestre junto a las bandas. Clic en un nombre la selecciona y las flechas ↑ ↓ de arriba la mueven. Al desmarcar una columna queda en su lugar, lista para reactivarla.
           </div>
           <button className="menu-columna-mas" onClick={onVerMas}>
             Más parámetros…

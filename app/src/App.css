@@ -789,7 +789,7 @@ body,
 .menu-columna .param-checks {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: flex-start;
   max-width: 100%;
   gap: 4px;
@@ -1197,9 +1197,77 @@ body,
   max-width: 320px;
 }
 
-.param-checks label {
+.param-checks.col-orden {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  max-width: none;
+}
+
+.col-orden-bloque {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.col-flechas-cabecera {
+  align-self: flex-end;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.param-checks .col-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   white-space: nowrap;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.param-checks .col-item:hover {
+  background: #f1f5f9;
+}
+
+.param-checks .col-inactiva {
+  color: #64748b;
+}
+
+.param-checks .col-seleccion {
+  background: #dbeafe;
+  outline: 1px solid #93c5fd;
+}
+
+.param-checks .col-nombre {
+  flex: 1;
+  text-align: left;
+}
+
+.param-checks .col-flechas button,
+.col-flechas-cabecera button {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  line-height: 1;
+  font-size: 12px;
   color: #334155;
+  cursor: pointer;
+}
+
+.param-checks .col-flechas button:hover:not(:disabled),
+.col-flechas-cabecera button:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.param-checks .col-flechas button:disabled,
+.col-flechas-cabecera button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .menu-acciones {

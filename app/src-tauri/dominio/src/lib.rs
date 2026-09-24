@@ -1,3 +1,4 @@
+pub mod apu;
 pub mod cpm;
 pub mod db;
 pub mod excel;

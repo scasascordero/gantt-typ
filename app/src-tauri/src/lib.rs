@@ -82,6 +82,11 @@ async fn preparar_filas(
 }
 
 #[tauri::command]
+fn analizar_apu(texto: String, codigo: String) -> Option<dominio::apu::ApuAnalisis> {
+    dominio::apu::analizar(&texto, &codigo)
+}
+
+#[tauri::command]
 async fn abrir_archivo() -> Result<Option<ArchivoAbierto>, String> {
     let elegido = tauri::async_runtime::spawn_blocking(|| {
         rfd::FileDialog::new()
@@ -675,6 +680,7 @@ pub fn run() {
             abrir_archivo,
             guardar_archivo,
             preparar_filas,
+            analizar_apu,
             crear_proyecto,
             borrar_proyecto,
             listar_proyectos,

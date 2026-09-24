@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use super::apu;
 use super::cpm::calcular_cpm;
 use super::fechas::a_dias;
 use super::modelo::*;
@@ -67,7 +68,10 @@ fn resolver_hoja(
 
     let av = interpretar_avance(campo(&item.map, "avance").unwrap_or(&serde_yaml::Value::Null));
     let cantidad = a_numero_o(campo(&item.map, "cantidad"));
-    let cu = a_numero_o(campo(&item.map, "costo-unitario"));
+    // costo-unitario explícito manda; si no, sale del APU (recursos x
+    // rendimiento), mismo cálculo que precio-unitario-de-recursos (datos.typ).
+    let cu = a_numero_o(campo(&item.map, "costo-unitario"))
+        .or_else(|| apu::precio_unitario(campo(&item.map, "recursos").unwrap_or(&serde_yaml::Value::Null)));
     let costo_expl = a_numero_o(campo(&item.map, "costo"));
     let costo = costo_expl
         .or_else(|| match (cantidad, cu) {

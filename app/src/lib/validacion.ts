@@ -134,6 +134,23 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
         }
       }
 
+      // `recursos` (APU): cada recurso necesita cantidad y precio numericos
+      const recursos = datos.recursos;
+      if (recursos != null) {
+        const listaR = Array.isArray(recursos) ? recursos : Object.values(recursos as object);
+        const malos = listaR.filter(
+          (r): r is Record<string, unknown> =>
+            r != null && typeof r === "object" && ((r as Record<string, unknown>).cantidad == null || (r as Record<string, unknown>).precio == null),
+        );
+        if (malos.length > 0) {
+          d.push({
+            linea,
+            mensaje: `'${clave}': ${malos.length} recurso(s) del APU sin 'cantidad' ni 'precio'`,
+            severidad: "aviso",
+          });
+        }
+      }
+
       const sub = nodo.get("subtareas", true);
       const tieneSub = isSeq(sub) && sub.items.length > 0;
       // hoja = sin hijos (misma semántica que la librería y el motor Rust):

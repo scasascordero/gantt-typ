@@ -25,6 +25,7 @@ interface Props {
   onCopia: (texto: string) => void;
   onAviso: (mensaje: string) => void;
   onPredecesoras: () => void;
+  onApu: () => void;
   onCerrar: () => void;
 }
 
@@ -39,6 +40,7 @@ export default function MenuTarea({
   onCopia,
   onAviso,
   onPredecesoras,
+  onApu,
   onCerrar,
 }: Props) {
   const [armado, setArmado] = useState(false);
@@ -121,6 +123,9 @@ export default function MenuTarea({
           <div className="menu-tarea-sep" />
           <button onClick={onPredecesoras} title="Abrir el editor de dependencias de esta tarea">
             ↳ Predecesoras…
+          </button>
+          <button onClick={onApu} title="Estudiar el precio unitario desde los recursos y rendimientos">
+            ⌀ Precio unitario…
           </button>
           <div className="menu-tarea-sep" />
           <div className="menu-tarea-grupo">Mover</div>

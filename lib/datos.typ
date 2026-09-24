@@ -220,6 +220,38 @@
   (inicio-dias: inicio-dias, termino-dias: termino-dias, duracion: duracion)
 }
 
+// Precio unitario de una actividad a partir de su descomposición `recursos`
+// (análisis de precios unitarios). Cada recurso contribuye con la cuota
+// `cantidad x precio / rendimiento` (rendimiento 1 por defecto). El campo
+// `recursos` admite una lista de mapas o un diccionario clave -> mapa/valor.
+// Si la actividad declara `costo-unitario` explícito, ese manda.
+#let precio-unitario-de-recursos(item) = {
+  let recursos = item.at("recursos", default: none)
+  if recursos == none {
+    return none
+  }
+  let lista = if type(recursos) == dictionary {
+    recursos.pairs().map(pair => {
+      let nombre = str(pair.at(0))
+      let v = pair.at(1)
+      let m = if type(v) == dictionary { v } else { (cantidad: v) }
+      (nombre: nombre, ..m)
+    })
+  } else {
+    recursos
+  }
+  let cuotas = lista.map(r => {
+    let cantidad = a-numero(r.at("cantidad", default: none))
+    let precio = a-numero(r.at("precio", default: none))
+    let rendimiento = a-numero(r.at("rendimiento", default: none))
+    if cantidad == none or precio == none { 0.0 } else {
+      let divisor = if rendimiento == none or rendimiento <= 0.0 { 1.0 } else { rendimiento }
+      cantidad * precio / divisor
+    }
+  })
+  if cuotas.len() == 0 { none } else { cuotas.sum() }
+}
+
 // Resuelve, en post-orden, fechas/duración/avance de UNA tarea (recursivo
 // puro: sin memoización ni estado compartido, para evitar mutar variables
 // capturadas de un ámbito externo, algo que Typst no permite dentro de
@@ -239,7 +271,8 @@
     // Costos: `cantidad` x `costo-unitario` = `costo`; un `costo` explícito
     // manda sobre el producto. `unidad` es solo texto descriptivo.
     let cantidad = a-numero(item.at("cantidad", default: none))
-    let cu = a-numero(item.at("costo-unitario", default: none))
+    let cu-expl = a-numero(item.at("costo-unitario", default: none))
+    let cu = if cu-expl != none { cu-expl } else { precio-unitario-de-recursos(item) }
     let costo-expl = a-numero(item.at("costo", default: none))
     let costo = if costo-expl != none { costo-expl }
       else if cantidad != none and cu != none { cantidad * cu }

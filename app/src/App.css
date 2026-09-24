@@ -1326,3 +1326,109 @@ body,
   color: #2563eb;
   margin-right: 4px;
 }
+
+/* Modal de análisis de precios unitarios (APU) */
+.apu {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(80vh, 640px);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgb(15 23 42 / 0.25);
+  z-index: 40;
+}
+
+.apu-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.apu-titulo small {
+  display: block;
+  font-weight: 400;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.apu-cuerpo {
+  padding: 14px 16px;
+  overflow: auto;
+}
+
+.apu-cargando,
+.apu-error {
+  color: #64748b;
+  font-size: 13.5px;
+  margin: 6px 0;
+}
+
+.apu-error {
+  color: #b91c1c;
+}
+
+.apu-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.apu-tabla th,
+.apu-tabla td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.apu-tabla th {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.apu-tabla td.num,
+.apu-tabla th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.apu-tabla tfoot td {
+  font-weight: 600;
+  border-top: 2px solid #cbd5e1;
+  border-bottom: none;
+  background: #f8fafc;
+}
+
+.apu-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.apu-acciones button {
+  padding: 6px 14px;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.apu-acciones button:hover {
+  background: #1d4ed1;
+}

@@ -17,6 +17,7 @@ import { excelAYaml, detectarColumnas, type ColumnasExcel, type Deteccion, type 
 import { editarCampo, editarCampoConsistente, leerCampo, leerConfigYaml, ponerConfigYaml, type ValorCampo } from "./lib/yamlEdicion";
 import { editarPredecesoras } from "./lib/yamlOperaciones";
 import EditorPredecesoras from "./EditorPredecesoras";
+import AnalisisApu from "./AnalisisApu";
 import MenuCalendario from "./MenuCalendario";
 import MenuColumnas from "./MenuColumnas";
 import { proyectoAYaml, yamlAProyecto, type ProyectoCompleto } from "./lib/proyectoDb";
@@ -87,6 +88,7 @@ function App() {
   const [menuColumnas, setMenuColumnas] = useState<{ x: number; y: number } | null>(null);
   const [menuTarea, setMenuTarea] = useState<{ x: number; y: number; codigo: string; nombre: string } | null>(null);
   const [editorPredecesoras, setEditorPredecesoras] = useState<{ codigo: string; nombre: string } | null>(null);
+  const [apuAbierto, setApuAbierto] = useState<{ codigo: string } | null>(null);
   const [copiado, setCopiado] = useState("");
   const [proyectos, setProyectos] = useState<ProyectoInfo[]>([]);
   const [popupFecha, setPopupFecha] = useState<PopupFecha | null>(null);
@@ -1519,7 +1521,26 @@ function App() {
           onCopia={setCopiado}
           onAviso={setMensaje}
           onPredecesoras={() => abrirPredecesoras(menuTarea.codigo, menuTarea.nombre)}
+          onApu={() => {
+            setMenuTarea(null);
+            setApuAbierto({ codigo: menuTarea.codigo });
+          }}
           onCerrar={() => setMenuTarea(null)}
+        />
+      )}
+      {apuAbierto && (
+        <AnalisisApu
+          codigo={apuAbierto.codigo}
+          texto={texto}
+          onInsertarPu={(codigo, pu) => {
+            try {
+              ponerEnEditor(editarCampo(textoRef.current, codigo, "costo-unitario", pu));
+              setMensaje(`'${codigo}': costo-unitario = ${pu.toLocaleString("es-CL")} insertado desde el APU`);
+            } catch (err) {
+              setMensaje(`Error al insertar el PU: ${String(err)}`);
+            }
+          }}
+          onCerrar={() => setApuAbierto(null)}
         />
       )}
       {editorPredecesoras && (

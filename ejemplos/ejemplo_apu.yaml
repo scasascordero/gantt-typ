@@ -1,0 +1,43 @@
+config:
+  titulo: "Ejemplo de análisis de precios unitarios (APU)"
+  mostrar-columnas: [duracion, costo-unitario, costo]
+tareas:
+  - codigo: "1"
+    nombre: Partida de excavación
+    subtareas:
+      - codigo: "1.1"
+        nombre: Excavación de fundaciones
+        inicio: 2026-03-02
+        duracion: 10
+        unidad: m3
+        cantidad: 120
+        # costo-unitario se calcula desde recursos (0.1×45000 + 0.2×1500 +
+        # 0.05×48000 = 7200); costo = 120 × 7200 = 864000.
+        recursos:
+          - tipo: mano-obra
+            nombre: Excavador (jornada)
+            cantidad: 0.1
+            rendimiento: 1
+            precio: 45000
+          - tipo: material
+            nombre: Huincha de marcar
+            cantidad: 0.2
+            rendimiento: 1
+            precio: 1500
+          - tipo: equipo
+            nombre: Retroexcavadora (hora)
+            cantidad: 0.05
+            rendimiento: 1
+            precio: 48000
+      - codigo: "1.2"
+        nombre: Retiro de escombros
+        inicio: 2026-03-16
+        duracion: 5
+        unidad: m3
+        cantidad: 95
+        # forma de diccionario: clave = nombre del recurso
+        recursos:
+          "Ayudante (jornada)":
+            cantidad: 0.25
+            rendimiento: 1
+            precio: 32000

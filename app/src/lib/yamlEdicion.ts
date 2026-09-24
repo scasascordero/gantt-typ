@@ -4,7 +4,8 @@
 
 import { parseDocument, isMap, isSeq, isPair, isScalar, type Document, type Node, type Pair, type YAMLMap, type YAMLSeq } from "yaml";
 
-import { aDias, aNumero, fechaIso } from "./proyecto.ts";
+import { aDias, fechaIso } from "./fechas";
+import { aNumero } from "./modelo";
 
 export type ValorCampo = string | number | boolean | null;
 

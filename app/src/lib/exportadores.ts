@@ -1,7 +1,7 @@
 // exportadores.ts — Serializadores MSPDI (MS Project 2003 XML), PMXML
 // (Primavera P6 XML) y XER (Primavera P6, texto delimitado por tabs).
-// Todos parten de la lista de filas ya resuelta por `prepararProyecto`
-// (fechas, duraciones, rollup, CPM, dependencias).
+// Todos parten de la lista de filas ya resuelta por el motor Rust
+// (`preparar_filas`): fechas, duraciones, rollup, CPM, dependencias.
 //
 // Nota: los cronogramas de la librería son en días de calendario. Los
 // planificadores usan calendarios de 8h x 5 días por defecto; los archivos
@@ -9,8 +9,8 @@
 // tareas, así P6 respeta las fechas tal cual. En MS Project, definí un
 // calendario de 7 días o aceptá que recalcule los fines de semana.
 
-import { fechaIso } from "./proyecto.ts";
-import type { Fila, TipoDep } from "./proyecto.ts";
+import { fechaIso } from "./fechas";
+import type { Fila, TipoDep } from "./modelo";
 
 export interface ProyectoExportable {
   nombre: string;

@@ -6,10 +6,10 @@ use dominio::fechas::dias_desde_epoca;
 use dominio::modelo::OpcionesCpm;
 use dominio::preparar::preparar_proyecto;
 
-// El shape JSON es la API hacia React: se serializa exactamente igual que
-// la Fila de proyecto.ts (camelCase, opcionales omitidos cuando faltan).
+// El shape JSON es la API hacia React: el contrato que la app espera
+// (`Fila` en app/src/lib/modelo.ts): camelCase, opcionales omitidos.
 #[test]
-fn json_shape_equivale_a_proyecto_ts() {
+fn json_shape_equivale_a_fila_modelo() {
     let filas = preparar_proyecto(YAML, &OpcionesCpm {
         cpm: true,
         inicio_proyecto: None,

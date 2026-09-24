@@ -4,7 +4,8 @@
 // la reconstrucción desde tareas/deps es un respaldo si falta.
 
 import { parse, stringify } from "yaml";
-import { aDias, aNumero, fechaIso, interpretarAvance, interpretarPredecesoras } from "./proyecto";
+import { aDias, fechaIso } from "./fechas";
+import { aNumero, interpretarAvance, interpretarPredecesoras } from "./modelo";
 
 export interface TareaDb {
   codigo: string;
@@ -41,7 +42,7 @@ export interface ProyectoCompleto {
 type Crudo = Record<string, unknown>;
 
 // Aplana la lista del YAML en orden DFS (padre antes que hijos), con el
-// nivel y el código del padre, igual que `aplanar` de proyecto.ts.
+// nivel y el código del padre, igual que `preparar_proyecto` (dominio Rust).
 function aplanar(
   lista: unknown,
   padreContexto: string | null,

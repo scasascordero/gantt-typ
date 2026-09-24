@@ -10,7 +10,8 @@ import { analizarSvg } from "./lib/geometria";
 import { listarTareas } from "./lib/yamlLineas";
 import { validarTexto, idLibre } from "./lib/validacion";
 import { generarMainTyp, valoresDefault, type Valor } from "./lib/params";
-import { prepararProyecto, fechaIso, type Fila } from "./lib/proyecto";
+import { fechaIso } from "./lib/fechas";
+import type { Fila } from "./lib/modelo";
 import { aMSPDI, aPMXML, aXER } from "./lib/exportadores";
 import { desdeMSPDI, esMSPDI } from "./lib/mspdi";
 import { excelAYaml, detectarColumnas, type ColumnasExcel, type Deteccion, type MatrizExcel } from "./lib/excelImport";
@@ -1119,23 +1120,14 @@ function App() {
 
   const exportarPlan = async (formato: "mspdi" | "pmxml" | "xer") => {
     try {
-      // Motor en Rust (dominio), misma API Fila[] que proyecto.ts
-      let filas: Fila[];
-      try {
-        filas = await invoke<Fila[]>("preparar_filas", {
-          texto: textoRef.current,
-          cpm: parametros["cpm"] === true,
-          inicioProyecto: fechaOpt("inicio-proyecto"),
-          terminoProyecto: fechaOpt("termino-proyecto"),
-        });
-      } catch (err) {
-        setMensaje(`Motor Rust no disponible, usando TS: ${String(err)}`);
-        filas = prepararProyecto(textoRef.current, {
-          cpm: parametros["cpm"] === true,
-          inicioProyecto: fechaOpt("inicio-proyecto"),
-          terminoProyecto: fechaOpt("termino-proyecto"),
-        });
-      }
+      // Motor en Rust (dominio), filas Fila[] ya resueltas (misma API que
+      // definía proyecto.ts, hoy eliminado)
+      const filas: Fila[] = await invoke<Fila[]>("preparar_filas", {
+        texto: textoRef.current,
+        cpm: parametros["cpm"] === true,
+        inicioProyecto: fechaOpt("inicio-proyecto"),
+        terminoProyecto: fechaOpt("termino-proyecto"),
+      });
       if (!filas.length) {
         setMensaje("nada que exportar: no se reconocieron tareas en el YAML");
         return;

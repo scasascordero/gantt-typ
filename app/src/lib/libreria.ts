@@ -8,7 +8,7 @@ import datosTyp from "../../gantt-lib/datos.typ?raw";
 import dibujoTyp from "../../gantt-lib/dibujo.typ?raw";
 import fechasTyp from "../../gantt-lib/fechas.typ?raw";
 import cpmTyp from "../../gantt-lib/cpm.typ?raw";
-import type { Fila } from "./proyecto";
+import type { Fila } from "./modelo";
 
 export function plantillaExportar(): string {
   return plantillaExport;

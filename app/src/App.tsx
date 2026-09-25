@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { basicSetup } from "codemirror";
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { yaml } from "@codemirror/lang-yaml";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import ejemploDatos from "../../ejemplos/ejemplo_1.yaml?raw";
 import { compilarSvg, fuentesLibreria, necesitaCpm, inyectarFechasCpm } from "./lib/libreria";
 import { analizarSvg } from "./lib/geometria";
@@ -28,6 +29,87 @@ import MenuTarea from "./MenuTarea";
 import PanelTabla from "./PanelTabla";
 import PropiedadesTarea from "./PropiedadesTarea";
 import "./App.css";
+
+// Piezas de la barra de menú: una franja con menús desplegables (Archivo,
+// Importar, Exportar, Editar, Ver) que agrupa todos los botones de la UI.
+function MenuRaiz({
+  nombre,
+  abierto,
+  onToggle,
+  children,
+}: {
+  nombre: string;
+  abierto: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className={abierto ? "menu-raiz abierto" : "menu-raiz"}>
+      <button
+        type="button"
+        className="menu-raiz-titulo"
+        onClick={onToggle}
+        aria-haspopup="menu"
+        aria-expanded={abierto}
+      >
+        {nombre}
+      </button>
+      {abierto && (
+        <div className="menu-desp" role="menu">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MenuSep() {
+  return <div className="menu-sep" />;
+}
+
+function MenuItem({
+  activa,
+  deshabilitado,
+  info,
+  onClick,
+  children,
+}: {
+  activa?: boolean;
+  deshabilitado?: boolean;
+  info?: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={"menu-item" + (activa ? " activa" : "")}
+      role="menuitem"
+      disabled={deshabilitado}
+      onClick={onClick}
+    >
+      <span>{children}</span>
+      {info && <span className="menu-item-info">{info}</span>}
+    </button>
+  );
+}
+
+function MenuInfo({ children }: { children: ReactNode }) {
+  return <span className="menu-info">{children}</span>;
+}
+
+function fijarTituloVentana(titulo: string) {
+  try {
+    document.title = titulo;
+  } catch {
+    // document.title siempre está disponible; guardia por si Tauri bloquea
+  }
+  if ("__TAURI_INTERNALS__" in globalThis) {
+    void getCurrentWindow()
+      .setTitle(titulo)
+      .catch(() => {});
+  }
+}
 
 const ZOOM_MIN = 1; // "Ajustar" (100%) es el piso: el dibujo nunca queda más
                     // chico que el ancho de su panel
@@ -97,8 +179,15 @@ function App() {
   const [copiado, setCopiado] = useState("");
   const [proyectos, setProyectos] = useState<ProyectoInfo[]>([]);
   const [popupFecha, setPopupFecha] = useState<PopupFecha | null>(null);
-  const [exportMenuAbierto, setExportMenuAbierto] = useState(false);
-  const [importMenuAbierto, setImportMenuAbierto] = useState(false);
+  const [menuRaizAbierto, setMenuRaizAbierto] = useState<string | null>(null);
+  const menuBarraRef = useRef<HTMLDivElement | null>(null);
+  const cerrarMenus = useCallback(() => setMenuRaizAbierto(null), []);
+  const alternarRaiz = useCallback(
+    (nombre: string) =>
+      setMenuRaizAbierto((abierto) => (abierto === nombre ? null : nombre)),
+    []
+  );
+  const [zoomTexto, setZoomTexto] = useState("100");
   const [excelRangos, setExcelRangos] = useState<{ ruta: string; info: ExcelInfo } | null>(null);
   const [excelMapa, setExcelMapa] = useState<{
     ruta: string;
@@ -118,6 +207,11 @@ function App() {
     [docs, idActivo],
   );
   const texto = docActual.texto;
+
+  // el nombre del archivo abierto se muestra en el título de la ventana
+  useEffect(() => {
+    fijarTituloVentana(`${docActual.nombre}${docActual.sucio ? " •" : ""} — Gantt Editor`);
+  }, [docActual.nombre, docActual.sucio]);
 
   const editorRef = useRef<EditorView | null>(null);
   const contenedorEditor = useRef<HTMLDivElement | null>(null);
@@ -1099,17 +1193,17 @@ function App() {
     };
   }, [popupFecha]);
 
-  // cierra el menú desplegable de exportación al hacer click o tecla afuera
+  // cierra la barra de menú al hacer click o Escape afuera de ella
   useEffect(() => {
-    if (!exportMenuAbierto) return;
+    if (!menuRaizAbierto) return;
     const cerrar = (ev: Event) => {
       if (ev instanceof KeyboardEvent) {
-        if (ev.key === "Escape") setExportMenuAbierto(false);
+        if (ev.key === "Escape") setMenuRaizAbierto(null);
         return;
       }
       const el = ev.target as Element | null;
-      if (el?.closest?.(".export-menu")) return;
-      setExportMenuAbierto(false);
+      if (el && menuBarraRef.current?.contains(el)) return;
+      setMenuRaizAbierto(null);
     };
     window.addEventListener("mousedown", cerrar);
     window.addEventListener("keydown", cerrar);
@@ -1117,27 +1211,18 @@ function App() {
       window.removeEventListener("mousedown", cerrar);
       window.removeEventListener("keydown", cerrar);
     };
-  }, [exportMenuAbierto]);
+  }, [menuRaizAbierto]);
 
-  // cierra el menú desplegable de importación al hacer click o tecla afuera
   useEffect(() => {
-    if (!importMenuAbierto) return;
-    const cerrar = (ev: Event) => {
-      if (ev instanceof KeyboardEvent) {
-        if (ev.key === "Escape") setImportMenuAbierto(false);
-        return;
-      }
-      const el = ev.target as Element | null;
-      if (el?.closest?.(".import-menu")) return;
-      setImportMenuAbierto(false);
-    };
-    window.addEventListener("mousedown", cerrar);
-    window.addEventListener("keydown", cerrar);
-    return () => {
-      window.removeEventListener("mousedown", cerrar);
-      window.removeEventListener("keydown", cerrar);
-    };
-  }, [importMenuAbierto]);
+    setZoomTexto(String(Math.round(zoom * 100)));
+  }, [zoom]);
+
+  const aplicarZoom = () => {
+    const n = Math.round(Number(zoomTexto) || 100);
+    const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, n / 100));
+    setZoom(z);
+    setZoomTexto(String(Math.round(z * 100)));
+  };
 
   // todas las exportaciones abren "Guardar como" con nombre propuesto
   // AAAA-MM-DD_<documento>.<ext> (editable, para no pisar archivos) y como
@@ -1284,11 +1369,126 @@ function App() {
 
   return (
     <div className="app">
-      <header className="cabecera">
-        <h1>Gantt Editor</h1>
-        <button onClick={() => setMenuAbierto(true)} title="Editar los parámetros de carta-gantt">
-          Configurar
-        </button>
+      <div className="menu-barra" ref={menuBarraRef}>
+        <h1 className="marca">Gantt Editor</h1>
+        <MenuRaiz nombre="Archivo" abierto={menuRaizAbierto === "archivo"} onToggle={() => alternarRaiz("archivo")}>
+          <MenuItem onClick={() => { cerrarMenus(); nuevoDoc(); }}>Nuevo</MenuItem>
+          <MenuItem onClick={() => { cerrarMenus(); void abrirArchivo(); }}>Abrir…</MenuItem>
+          <MenuItem onClick={() => { cerrarMenus(); void abrirGtt(); }}>Abrir .gtt…</MenuItem>
+          <MenuSep />
+          <MenuItem deshabilitado={hayErroresValidacion} info="Ctrl+S" onClick={() => { cerrarMenus(); guardarDoc(false); }}>
+            Guardar
+          </MenuItem>
+          <MenuItem deshabilitado={hayErroresValidacion} onClick={() => { cerrarMenus(); guardarDoc(true); }}>
+            Guardar como…
+          </MenuItem>
+          <MenuItem onClick={() => { cerrarMenus(); void guardarGtt(false); }}>Guardar .gtt</MenuItem>
+          <MenuSep />
+          <MenuItem onClick={() => { cerrarMenus(); setMenuProyectosAbierto(true); }}>Proyectos…</MenuItem>
+          <MenuItem onClick={() => { cerrarMenus(); cerrarDoc(idActivo); }}>Cerrar</MenuItem>
+        </MenuRaiz>
+        <MenuRaiz nombre="Importar" abierto={menuRaizAbierto === "importar"} onToggle={() => alternarRaiz("importar")}>
+          <MenuItem onClick={() => { cerrarMenus(); void importarTexto("mspdi"); }}>MSPDI…</MenuItem>
+          <MenuItem onClick={() => { cerrarMenus(); void importarTexto("pmxml"); }}>PMXML…</MenuItem>
+          <MenuItem onClick={() => { cerrarMenus(); void importarTexto("xer"); }}>XER…</MenuItem>
+          <MenuItem onClick={() => { cerrarMenus(); void importarExcel(); }}>Excel…</MenuItem>
+        </MenuRaiz>
+        <MenuRaiz nombre="Exportar" abierto={menuRaizAbierto === "exportar"} onToggle={() => alternarRaiz("exportar")}>
+          <MenuItem deshabilitado={estados !== "ok" || exportando} onClick={() => { cerrarMenus(); exportarPdf(); }}>
+            {exportando ? "Exportando…" : "PDF"}
+          </MenuItem>
+          <MenuItem deshabilitado={estados !== "ok"} onClick={() => { cerrarMenus(); exportarSvg(); }}>
+            SVG
+          </MenuItem>
+          <MenuSep />
+          <MenuItem deshabilitado={estados !== "ok"} info="Plan" onClick={() => { cerrarMenus(); exportarPlan("mspdi"); }}>
+            MSPDI
+          </MenuItem>
+          <MenuItem deshabilitado={estados !== "ok"} info="Plan" onClick={() => { cerrarMenus(); exportarPlan("pmxml"); }}>
+            PMXML
+          </MenuItem>
+          <MenuItem deshabilitado={estados !== "ok"} info="Plan" onClick={() => { cerrarMenus(); exportarPlan("xer"); }}>
+            XER
+          </MenuItem>
+          <MenuItem deshabilitado={estados !== "ok"} info="Plan" onClick={() => { cerrarMenus(); exportarExcel(); }}>
+            Excel
+          </MenuItem>
+        </MenuRaiz>
+        <MenuRaiz nombre="Editar" abierto={menuRaizAbierto === "editar"} onToggle={() => alternarRaiz("editar")}>
+          <MenuItem activa={vistaIzquierda === "yaml"} onClick={() => { cerrarMenus(); setVistaIzquierda("yaml"); }}>
+            Ver YAML
+          </MenuItem>
+          <MenuItem activa={vistaIzquierda === "tabla"} onClick={() => { cerrarMenus(); setVistaIzquierda("tabla"); }}>
+            Ver Tabla
+          </MenuItem>
+          <MenuSep />
+          <MenuItem
+            activa={editorEditable}
+            deshabilitado={vistaIzquierda !== "yaml"}
+            info={editorEditable ? "editable" : "solo lectura"}
+            onClick={() => { cerrarMenus(); alternarEditorEditable(); }}
+          >
+            Edición directa del YAML
+          </MenuItem>
+          <MenuSep />
+          <MenuItem activa={editorOculto} onClick={() => { cerrarMenus(); setEditorOculto((o) => !o); }}>
+            {editorOculto ? "Mostrar panel" : "Ocultar panel"}
+          </MenuItem>
+        </MenuRaiz>
+        <MenuRaiz nombre="Configurar" abierto={menuRaizAbierto === "configurar"} onToggle={() => alternarRaiz("configurar")}>
+          <MenuItem onClick={() => { cerrarMenus(); setMenuAbierto(true); }}>
+            Parámetros de la carta…
+          </MenuItem>
+        </MenuRaiz>
+        <MenuRaiz nombre="Ver" abierto={menuRaizAbierto === "ver"} onToggle={() => alternarRaiz("ver")}>
+          <MenuItem onClick={() => { cerrarMenus(); setZoom((z) => Math.max(ZOOM_MIN, z / 1.25)); }}>
+            Alejar
+          </MenuItem>
+          <MenuItem onClick={() => { cerrarMenus(); setZoom((z) => Math.min(ZOOM_MAX, z * 1.25)); }}>
+            Acercar
+          </MenuItem>
+          <MenuItem onClick={() => { cerrarMenus(); setZoom(1); }}>Ajustar al ancho</MenuItem>
+          <div className="menu-fila">
+            <span>Zoom</span>
+            <input
+              className="zoom-input"
+              type="number"
+              min={100}
+              max={800}
+              value={zoomTexto}
+              onChange={(e) => setZoomTexto(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  aplicarZoom();
+                }
+              }}
+              onBlur={aplicarZoom}
+            />
+            <span>%</span>
+          </div>
+          <MenuSep />
+          <MenuItem info="Nivel 1" onClick={() => { cerrarMenus(); fijarNiveles("1"); }}>
+            Colapsar
+          </MenuItem>
+          <MenuItem info="Todos" onClick={() => { cerrarMenus(); fijarNiveles("auto"); }}>
+            Expandir
+          </MenuItem>
+          <MenuInfo>Niveles: {nivelActual === "auto" ? "todos" : nivelActual}</MenuInfo>
+        </MenuRaiz>
+        <MenuRaiz nombre="Ventana" abierto={menuRaizAbierto === "ventana"} onToggle={() => alternarRaiz("ventana")}>
+          {docs.map((d) => (
+            <MenuItem
+              key={d.id}
+              activa={d.id === idActivo}
+              info={d.sucio ? "•" : undefined}
+              onClick={() => { cerrarMenus(); seleccionarDoc(d.id); }}
+            >
+              {d.proyectoId !== undefined && <span className="pestana-proyecto">◆</span>}
+              {d.nombre}
+            </MenuItem>
+          ))}
+        </MenuRaiz>
         <div className={`estado estado-${estados}`}>
           {nProblemas
             ? `${nProblemas} problema(s)`
@@ -1296,150 +1496,7 @@ function App() {
               ? `ok · ${milis.toFixed(0)} ms · ${tareas.length} tareas`
               : "compilando…"}
         </div>
-        <button onClick={exportarPdf} disabled={exportando || estados !== "ok"}>
-          {exportando ? "Exportando…" : "Exportar PDF"}
-        </button>
-        <button onClick={exportarSvg} disabled={estados !== "ok"} title="Guardar el SVG del preview">
-          Exportar SVG
-        </button>
-        <div className="export-menu">
-          <button
-            className="export-toggle"
-            onClick={() => setExportMenuAbierto((o) => !o)}
-            disabled={estados !== "ok"}
-            title="Exportar el plan a formatos de proyecto"
-          >
-            Exportar plan…
-            <span className="export-flecha">{exportMenuAbierto ? "▲" : "▼"}</span>
-          </button>
-          {exportMenuAbierto && (
-            <div className="export-lista">
-              <button
-                disabled={estados !== "ok"}
-                onClick={() => {
-                  setExportMenuAbierto(false);
-                  exportarPlan("mspdi");
-                }}
-              >
-                MSPDI
-              </button>
-              <button
-                disabled={estados !== "ok"}
-                onClick={() => {
-                  setExportMenuAbierto(false);
-                  exportarPlan("pmxml");
-                }}
-              >
-                PMXML
-              </button>
-              <button
-                disabled={estados !== "ok"}
-                onClick={() => {
-                  setExportMenuAbierto(false);
-                  exportarPlan("xer");
-                }}
-              >
-                XER
-              </button>
-              <button
-                disabled={estados !== "ok"}
-                onClick={() => {
-                  setExportMenuAbierto(false);
-                  exportarExcel();
-                }}
-              >
-                Excel
-              </button>
-            </div>
-          )}
-        </div>
         {mensaje && <span className="mensaje">{mensaje}</span>}
-      </header>
-
-      <div className="barra-archivos">
-        <div className="pestanas">
-          {docs.map((d) => (
-            <button
-              key={d.id}
-              className={`pestana${d.id === idActivo ? " activa" : ""}`}
-              onClick={() => seleccionarDoc(d.id)}
-              title={d.proyectoId !== undefined ? `Proyecto #${d.proyectoId} · ${d.ruta ?? d.nombre}` : (d.ruta ?? d.nombre)}
-            >
-              {d.proyectoId !== undefined && <span className="pestana-proyecto">◆</span>}
-              {d.nombre}
-              {d.sucio && <span className="pestana-sucio"> •</span>}
-            </button>
-          ))}
-        </div>
-        <div className="acciones-archivo">
-          <button onClick={nuevoDoc} title="Nuevo documento">
-            Nuevo
-          </button>
-          <button onClick={() => void abrirArchivo()} title="Abrir archivo…">
-            Abrir…
-          </button>
-          <button onClick={() => void abrirGtt()} title="Abrir un archivo .gtt (proyecto SQLite)">
-            Abrir .gtt…
-          </button>
-          <div className="import-menu">
-            <button
-              className="import-toggle"
-              onClick={() => setImportMenuAbierto((o) => !o)}
-              title="Importar un plan desde otro formato"
-            >
-              Importar…
-              <span className="import-flecha">{importMenuAbierto ? "▲" : "▼"}</span>
-            </button>
-            {importMenuAbierto && (
-              <div className="import-lista">
-                {(["mspdi", "pmxml", "xer", "excel"] as const).map((fmt) => (
-                  <button
-                    key={fmt}
-                    onClick={() => {
-                      setImportMenuAbierto(false);
-                      if (fmt === "excel") void importarExcel();
-                      else void importarTexto(fmt);
-                    }}
-                  >
-                    {fmt === "mspdi" ? "MSPDI" : fmt === "excel" ? "Excel" : fmt.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => guardarDoc(false)}
-            disabled={hayErroresValidacion}
-            title={hayErroresValidacion ? "Corrige los errores de validación antes de guardar" : "Guardar (Ctrl+S)"}
-          >
-            Guardar
-          </button>
-          <button
-            onClick={() => guardarDoc(true)}
-            disabled={hayErroresValidacion}
-            title={hayErroresValidacion ? "Corrige los errores de validación antes de guardar" : "Guardar como…"}
-          >
-            Guardar como…
-          </button>
-          <button
-            onClick={() => void guardarGtt(false)}
-            title="Guardar el documento en un archivo .gtt (un proyecto por archivo). Si el archivo ya es .gtt, guarda en el mismo"
-          >
-            Guardar .gtt
-          </button>
-          <button
-            onClick={() => setEditorOculto((o) => !o)}
-            title="Ocultar o mostrar el panel de edición (tabla o YAML) para que la carta use todo el ancho"
-          >
-            {editorOculto ? "Mostrar panel" : "Ocultar panel"}
-          </button>
-          <button onClick={() => setMenuProyectosAbierto(true)} title="Proyectos guardados en la biblioteca">
-            Proyectos…
-          </button>
-          <button onClick={() => cerrarDoc(idActivo)} title="Cerrar documento">
-            Cerrar
-          </button>
-        </div>
       </div>
 
       <main
@@ -1452,46 +1509,6 @@ function App() {
         }}
       >
         <section className="panel-editor" onContextMenu={alClicDerechoEditor}>
-          <div className="editor-cab">
-            <span className="editor-vistas">
-              <button
-                type="button"
-                className={vistaIzquierda === "yaml" ? "activa" : ""}
-                onClick={() => setVistaIzquierda("yaml")}
-                title="Ver el YAML del proyecto"
-              >
-                YAML
-              </button>
-              <button
-                type="button"
-                className={vistaIzquierda === "tabla" ? "activa" : ""}
-                onClick={() => setVistaIzquierda("tabla")}
-                title="Editar las tareas en una tabla"
-              >
-                Tabla
-              </button>
-            </span>
-            {vistaIzquierda === "yaml" && (
-              <>
-                <span className="editor-estado">
-                  <span className={`editor-etiqueta${editorEditable ? " activo" : ""}`}>
-                    {editorEditable ? "editable" : "solo lectura"}
-                  </span>
-                </span>
-                <button
-                  className="editor-desbloquear"
-                  onClick={alternarEditorEditable}
-                  title={
-                    editorEditable
-                      ? "Volver a solo lectura: las ediciones pasan solo por la carta"
-                      : "Habilitar la edición directa del YAML (con riesgo de invalidar la carta)"
-                  }
-                >
-                  {editorEditable ? "Bloquear texto" : "Editar texto"}
-                </button>
-              </>
-            )}
-          </div>
           <div ref={contenedorEditor} className={`editor${vistaIzquierda === "tabla" ? " oculto" : ""}`} />
           <PanelTabla
             texto={texto}
@@ -1517,42 +1534,13 @@ function App() {
         <section className="panel-preview">
           {svg && geometria ? (
             <>
-              <div className="zoom-barra">
-                <button
-                  onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z / 1.25))}
-                  title="Alejar"
-                >
-                  −
-                </button>
-                <button
-                  onClick={() => setZoom((z) => Math.min(8, z * 1.25))}
-                  title="Acercar"
-                >
-                  +
-                </button>
-                <button onClick={() => setZoom(1)} title="Ajustar al ancho">
-                  Ajustar
-                </button>
-                <span className="zoom-pct">{Math.round(zoom * 100)}%</span>
-                {/** niveles */}
-                <span className="zoom-sep" />
-                <button onClick={() => fijarNiveles("1")} title="Colapsar: mostrar solo el nivel 1">
-                  Colapsar
-                </button>
-                <button onClick={() => fijarNiveles("auto")} title="Expandir: mostrar todos los niveles">
-                  Expandir
-                </button>
-                <span className="zoom-pct">
-                  Niveles: {nivelActual === "auto" ? "todos" : nivelActual}
-                </span>
-                <span className="zoom-ayuda">Ctrl + rueda: zoom · clic: ir a la línea · clic derecho: propiedades</span>
-              </div>
               <div
                 ref={svgCaja}
                 className="svg-contenedor"
                 onClick={alClicSvg}
                 onDoubleClick={alDobleClicCarta}
                 onContextMenu={alClicDerechoCarta}
+                title="Ctrl + rueda: zoom · clic: ir a la línea · clic derecho: propiedades"
               >
                 <div
                   dangerouslySetInnerHTML={{ __html: svg }}

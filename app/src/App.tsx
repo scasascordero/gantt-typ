@@ -25,6 +25,7 @@ import { proyectoAYaml, yamlAProyecto, type ProyectoCompleto } from "./lib/proye
 import MenuParametros from "./MenuParametros";
 import MenuProyectos, { type ProyectoInfo } from "./MenuProyectos";
 import MenuTarea from "./MenuTarea";
+import PanelTabla from "./PanelTabla";
 import PropiedadesTarea from "./PropiedadesTarea";
 import "./App.css";
 
@@ -77,6 +78,9 @@ function App() {
   const [anchoEditorPct, setAnchoEditorPct] = useState(40);
   const [editorOculto, setEditorOculto] = useState(false);
   const [editorEditable, setEditorEditable] = useState(false); // si mostrar el YAML en modo editable
+  const [vistaIzquierda, setVistaIzquierda] = useState<"yaml" | "tabla">("yaml");
+  const [tablaSeleccion, setTablaSeleccion] = useState<string | null>(null);
+  const tablaPanelRef = useRef<HTMLDivElement | null>(null);
   const editorEditableRef = useRef(editorEditable);
   editorEditableRef.current = editorEditable;
   const readonlyComp = useRef(new Compartment());
@@ -302,9 +306,15 @@ function App() {
   const alClicSvg = useCallback(
     (e: React.MouseEvent) => {
       const i = indiceDePunto(e);
-      if (i >= 0) saltarATarea(i);
+      if (i < 0) return;
+      if (vistaIzquierda === "tabla") {
+        const t = tareas[i];
+        if (t) setTablaSeleccion(t.id);
+      } else {
+        saltarATarea(i);
+      }
     },
-    [indiceDePunto, saltarATarea],
+    [indiceDePunto, saltarATarea, vistaIzquierda, tareas],
   );
 
   const ponerEnEditor = useCallback((textoNuevo: string) => {
@@ -933,6 +943,94 @@ function App() {
     };
   }, [arrastrandoDivisor]);
 
+  // Sincronización continua de la tabla y la carta: con el mismo paso vertical
+  // (alto-fila × escala del SVG) y un delta de desplazamiento constante, la
+  // fila i y la banda i quedan a la misma altura en pantalla siempre.
+  useEffect(() => {
+    const contC = svgCaja.current;
+    const contT = tablaPanelRef.current;
+    if (vistaIzquierda !== "tabla" || !contC || !contT || !svg || !geometria) return;
+    if (!geometria.bandas.length) return;
+    const svgEl = contC.querySelector("svg");
+    if (!svgEl) return;
+
+    let limpiar: Array<() => void> = [];
+    let ultimo = "";
+    const aplicar = () => {
+      const sr = svgEl.getBoundingClientRect();
+      if (sr.height <= 0) return;
+      const escala = sr.height / geometria.alto;
+      const b = geometria.bandas;
+      const pasoBanda = (b[1]?.y0 - b[0].y0) * escala;
+      const paso =
+        Number.isFinite(pasoBanda) && pasoBanda > 0
+          ? pasoBanda
+          : Number(parametros["alto-fila"] ?? 0.6) * 28.346 * escala;
+      const fila0 = contT.querySelector("tbody tr.fila-tarea") as HTMLElement | null;
+    if (!fila0) return;
+    // espacio previo de la carta antes de la primera banda (calendario), para
+    // replicarlo como espaciador antes de la primera fila de la tabla.
+    const cr = contC.getBoundingClientRect();
+    const espIni = sr.top + b[0].y0 * escala - (cr.top - contC.scrollTop);
+    contT.style.setProperty("--espacio-ini", `${Math.max(0, espIni).toFixed(2)}px`);
+    // const K = posición en pantalla (layout) de banda 0 menos la de fila 0,
+    // independiente del scroll actual: offC y offR se calculan quitando la
+    // dependencia de scrollTop, de modo que K es estable entre re-ejecuciones.
+    const offC = sr.top + b[0].y0 * escala + contC.scrollTop;
+    const offR = fila0.getBoundingClientRect().top + contT.scrollTop;
+    const k = offC - offR;
+    const firma = `${Math.max(4, paso).toFixed(2)}|${k.toFixed(2)}`;
+    if (firma === ultimo) return;
+    ultimo = firma;
+
+    limpiar.forEach((f) => f());
+    limpiar = [];
+    const pasoPx = Math.max(4, paso).toFixed(2);
+    contT.style.setProperty("--fila-px", `${pasoPx}px`);
+    contT.style.setProperty("--espacio-ini", `${Math.max(0, espIni).toFixed(2)}px`);
+
+    const tope = (el: HTMLElement, v: number) =>
+      Math.min(Math.max(0, v), Math.max(0, el.scrollHeight - el.clientHeight));
+    let sincro = false;
+    const terminar = () => requestAnimationFrame(() => (sincro = false));
+    const onTabla = () => {
+      if (sincro) return;
+      sincro = true;
+      contC.scrollTop = tope(contC, contT.scrollTop + k);
+      terminar();
+    };
+    const onCarta = () => {
+      if (sincro) return;
+      sincro = true;
+      contT.scrollTop = tope(contT, contC.scrollTop - k);
+      terminar();
+    };
+    contT.addEventListener("scroll", onTabla);
+    contC.addEventListener("scroll", onCarta);
+    limpiar.push(() => {
+      contT.removeEventListener("scroll", onTabla);
+      contC.removeEventListener("scroll", onCarta);
+    });
+
+    // alinear también el estado inicial (sin esperar el primer scroll: al
+    // montar la tabla ambos contenedores están en 0 y las filas se desvían de
+    // las bandas en k px).
+    sincro = true;
+    contC.scrollTop = tope(contC, contT.scrollTop + k);
+    contT.scrollTop = tope(contT, contC.scrollTop - k);
+    terminar();
+    };
+
+    aplicar();
+    const ro = new ResizeObserver(() => aplicar());
+    ro.observe(contC);
+    ro.observe(contT);
+    return () => {
+      ro.disconnect();
+      limpiar.forEach((f) => f());
+    };
+  }, [svg, zoom, anchoEditorPct, vistaIzquierda, geometria, parametros]);
+
   // clic derecho sobre una fecha AAAA-MM-DD del YAML: calendario para elegirla
   const alClicDerechoEditor = useCallback((e: React.MouseEvent) => {
     const v = editorRef.current;
@@ -1331,9 +1429,9 @@ function App() {
           </button>
           <button
             onClick={() => setEditorOculto((o) => !o)}
-            title="Ocultar o mostrar el editor YAML (la carta usa todo el ancho)"
+            title="Ocultar o mostrar el panel de edición (tabla o YAML) para que la carta use todo el ancho"
           >
-            {editorOculto ? "Mostrar YAML" : "Ocultar YAML"}
+            {editorOculto ? "Mostrar panel" : "Ocultar panel"}
           </button>
           <button onClick={() => setMenuProyectosAbierto(true)} title="Proyectos guardados en la biblioteca">
             Proyectos…
@@ -1355,24 +1453,55 @@ function App() {
       >
         <section className="panel-editor" onContextMenu={alClicDerechoEditor}>
           <div className="editor-cab">
-            <span className="editor-estado">
-              <span className={`editor-etiqueta${editorEditable ? " activo" : ""}`}>
-                {editorEditable ? "editable" : "solo lectura"}
-              </span>
+            <span className="editor-vistas">
+              <button
+                type="button"
+                className={vistaIzquierda === "yaml" ? "activa" : ""}
+                onClick={() => setVistaIzquierda("yaml")}
+                title="Ver el YAML del proyecto"
+              >
+                YAML
+              </button>
+              <button
+                type="button"
+                className={vistaIzquierda === "tabla" ? "activa" : ""}
+                onClick={() => setVistaIzquierda("tabla")}
+                title="Editar las tareas en una tabla"
+              >
+                Tabla
+              </button>
             </span>
-            <button
-              className="editor-desbloquear"
-              onClick={alternarEditorEditable}
-              title={
-                editorEditable
-                  ? "Volver a solo lectura: las ediciones pasan solo por la carta"
-                  : "Habilitar la edición directa del YAML (con riesgo de invalidar la carta)"
-              }
-            >
-              {editorEditable ? "Bloquear texto" : "Editar texto"}
-            </button>
+            {vistaIzquierda === "yaml" && (
+              <>
+                <span className="editor-estado">
+                  <span className={`editor-etiqueta${editorEditable ? " activo" : ""}`}>
+                    {editorEditable ? "editable" : "solo lectura"}
+                  </span>
+                </span>
+                <button
+                  className="editor-desbloquear"
+                  onClick={alternarEditorEditable}
+                  title={
+                    editorEditable
+                      ? "Volver a solo lectura: las ediciones pasan solo por la carta"
+                      : "Habilitar la edición directa del YAML (con riesgo de invalidar la carta)"
+                  }
+                >
+                  {editorEditable ? "Bloquear texto" : "Editar texto"}
+                </button>
+              </>
+            )}
           </div>
-          <div ref={contenedorEditor} className="editor" />
+          <div ref={contenedorEditor} className={`editor${vistaIzquierda === "tabla" ? " oculto" : ""}`} />
+          <PanelTabla
+            texto={texto}
+            oculto={vistaIzquierda !== "tabla"}
+            seleccion={tablaSeleccion}
+            maxNivel={nivelActual}
+            tablaRef={tablaPanelRef}
+            onCambiar={ponerEnEditor}
+            onSeleccionar={setTablaSeleccion}
+          />
         </section>
 
         <div

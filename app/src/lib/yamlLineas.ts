@@ -6,6 +6,12 @@ export interface Tarea {
   linea: number;
   nivel: number;
   predecesoras: string[];
+  // valores crudos del nodo (tipo YAML resuelto por toJSON): para mostrar y
+  // editar en la tabla. Ausente si la tarea no declara el campo.
+  inicio?: unknown;
+  termino?: unknown;
+  duracion?: unknown;
+  avance?: unknown;
 }
 
 function tokensDePredecesoras(valor: unknown): string[] {
@@ -43,6 +49,10 @@ export function listarTareas(texto: string): Tarea[] {
           linea,
           nivel,
           predecesoras: tokensDePredecesoras(datos.predecesoras),
+          inicio: datos.inicio,
+          termino: datos.termino,
+          duracion: datos.duracion,
+          avance: datos.avance,
         });
       }
       // con `ocultar-subtareas: true` la librería no dibuja el subárbol:

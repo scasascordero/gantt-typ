@@ -278,19 +278,6 @@ body,
   color: #64748b;
 }
 
-.panel-propiedades {
-  position: fixed;
-  z-index: 55;
-  width: 300px;
-  max-height: 420px;
-  overflow-y: auto;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  box-shadow: 0 10px 30px rgb(15 23 42 / 0.25);
-  font-size: 13px;
-}
-
 .prop-cab {
   display: flex;
   justify-content: space-between;
@@ -442,10 +429,12 @@ body,
   border-radius: 3px;
 }
 
-/* Renombrado inline con doble clic (dentro de svg-hoja, sobre el nombre). */
+/* Edición inline de una celda con doble clic (dentro de svg-hoja). Por encima
+   del popup de propiedades (z 54) para poder escribir sin que el fondo
+   translúcido lo tape. */
 .renombrar-carta {
   position: absolute;
-  z-index: 2;
+  z-index: 56;
   box-sizing: border-box;
   padding: 0 2px;
   border: 1px solid #2563eb;
@@ -457,30 +446,34 @@ body,
   outline: none;
 }
 
-/* Columna anclada de propiedades (a la derecha de la carta). */
-.panel-derecha-sep {
-  background: #cbd5e1;
+/* Ventana de propiedades de la actividad seleccionada: popup centrado para no
+   desplazar la carta. Un fondo translúcido cierra al hacer clic fuera. */
+.panel-propiedades-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 54;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(15 23 42 / 0.25);
 }
 
-.panel-propiedades-dock {
+.panel-propiedades-popup {
   background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgb(15 23 42 / 0.3);
+  width: 360px;
+  max-width: 100%;
+  max-height: min(560px, calc(100vh - 48px));
   overflow-y: auto;
-  min-width: 0;
-  min-height: 0;
   font-size: 13px;
 }
 
-.panel-propiedades-dock .panel-propiedades {
-  position: static;
-  width: auto;
-  max-height: none;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.panel-propiedades-dock .prop-cab {
+.panel-propiedades-popup .prop-cab {
   position: sticky;
+  top: 0;
 }
 
 .prop-codigo {
@@ -734,13 +727,6 @@ body,
   background: #f8fafc;
   padding: 12px;
   margin-bottom: 14px;
-}
-
-.vista-impresion-pagina-titulo {
-  color: #475569;
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 8px;
 }
 
 .vista-impresion-svg svg {

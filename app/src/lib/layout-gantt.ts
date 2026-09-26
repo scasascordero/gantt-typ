@@ -563,6 +563,18 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
   const barras: { x: number; y: number; w: number; h: number; cx: number; cy: number; codigo: string }[] = [];
   const filasPorId = new Map<string, Fila>();
   const filasPorCodigo = new Map<string, Fila>();
+  // Columnas que se editan escribiendo un campo de la actividad (el resto son
+  // derivadas: costo, holgura, crítico, fechas tempranas/tardías).
+  const COL_CAMPO: Record<string, string> = {
+    duracion: "duracion",
+    inicio: "inicio",
+    termino: "termino",
+    avance: "avance",
+    cantidad: "cantidad",
+    unidad: "unidad",
+    "costo-unitario": "costo-unitario",
+  };
+  const celdas: { indice: number; campo: string; x0: number; x1: number }[] = [];
 
   visibles.forEach((f, i) => {
     const yFilaTop = y0 + i * altoFilaPx;
@@ -571,6 +583,13 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
     bandas.push({ y0: yFilaTop + yDesp, y1: yFilaBottom + yDesp, codigo: f.codigo });
     if (f.id) filasPorId.set(f.id, f);
     filasPorCodigo.set(f.codigo, f);
+
+    celdas.push({ indice: i, campo: "nombre", x0: 0, x1: anchoNombreFinal });
+    for (let j = 0; j < mostrarColumnas.length; j++) {
+      const campo = COL_CAMPO[mostrarColumnas[j]];
+      if (!campo) continue;
+      celdas.push({ indice: i, campo, x0: colXInicios[j], x1: colXInicios[j] + anchosColumnas[j] });
+    }
 
     // Nivel de texto por fila (paridad gantt.typ): negrita manual o nivel 0.
     const peso = f.negrita === true ? "bold" : f.negrita === false ? "regular" : f.nivel === 0 ? "bold" : "regular";
@@ -712,6 +731,7 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
     dias: { inicio: diaMin, fin: diaMax },
     calendario: { x0: anchoTabla, y0: yDesp, y1: yDesp + altoEncabezado },
     columnas: mostrarColumnas.length > 0 ? { x0: anchoNombreFinal, x1: anchoTabla, y0: yDesp, y1: yDesp + altoEncabezado } : undefined,
+    celdas,
   };
 
   return { svg, geometria, milis: performance.now() - t0 };

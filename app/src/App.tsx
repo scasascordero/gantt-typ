@@ -27,6 +27,30 @@ import PropiedadesTarea from "./PropiedadesTarea";
 import VistaImpresion, { type VistaImpresionEstado } from "./VistaImpresion";
 import "./App.css";
 
+// Coerción del texto de una celda editada inline al valor YAML correspondiente.
+// Fechas: AAAA-MM-DD. Avance: "50" o "50%" → 0.5. Campos numéricos: número, o
+// la cadena tal cual si es una fórmula ("160*2"); vacío → null (borra el campo).
+function coerceValorCelda(campo: string, s: string): ValorCampo {
+  switch (campo) {
+    case "unidad":
+      return s === "" ? null : s;
+    case "inicio":
+    case "termino":
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error(`Fecha esperada en formato AAAA-MM-DD ("${s}")`);
+      return s;
+    case "avance": {
+      const t = s.replace(/%$/, "").trim();
+      if (!/^-?\d*\.?\d+$/.test(t)) throw new Error(`Avance esperado en % ("${s}")`);
+      const n = Number(t);
+      return Math.abs(n) > 1 ? n / 100 : n;
+    }
+    default: {
+      if (s === "") return null;
+      return /^-?\d*\.?\d+$/.test(s) ? Number(s) : s;
+    }
+  }
+}
+
 // Piezas de la barra de menú: una franja con menús desplegables (Archivo,
 // Importar, Exportar, Editar, Ver) que agrupa todos los botones de la UI.
 function MenuRaiz({
@@ -175,7 +199,7 @@ function App() {
   const [mapaSel, setMapaSel] = useState<ColumnasExcel | null>(null);
   const [seleccion, setSeleccion] = useState<{ codigo: string } | null>(null);
   const [rectSel, setRectSel] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
-  const [renombrando, setRenombrando] = useState<{ codigo: string; valor: string; rect: { left: number; top: number; width: number; height: number } } | null>(null);
+  const [editandoCelda, setEditandoCelda] = useState<{ codigo: string; campo: string; valor: string; rect: { left: number; top: number; width: number; height: number } } | null>(null);
 
   const nivelActual = String(parametros["mostrar-niveles"] ?? "auto");
 
@@ -438,57 +462,64 @@ const filas = filasPanel;
 
   const alDobleClicCarta = useCallback(
     (e: React.MouseEvent) => {
-      const i = indiceDePunto(e);
-      if (i < 0) return;
       const g = geometria;
       const caja = svgCaja.current;
-      const t = tareas[i];
-      if (!g || !caja || !t || g.tablaX === undefined) return;
+      if (!g || !caja || !g.celdas || g.celdas.length === 0) return;
       const s = caja.querySelector("svg");
       if (!s) return;
-      e.preventDefault();
       const rect = s.getBoundingClientRect();
-      if (rect.width <= 0) return;
-      // Localizar el <text> del nombre (columna de la izquierda del calendario).
+      if (rect.width <= 0 || rect.height <= 0) return;
+      // Posición del clic en coordenadas del SVG (escala = mismo build de la
+      // geometría, sin medición de <text> → robusto aunque el texto no exista).
       const fEscX = g.ancho / rect.width;
       const fEscY = g.alto / rect.height;
+      const px = (e.clientX - rect.left) * fEscX;
+      const py = (e.clientY - rect.top) * fEscY;
+      const i = g.bandas.findIndex((b) => py >= b.y0 && py < b.y1);
+      const t = tareas[i];
+      if (i < 0 || !t) return;
+      const celda = g.celdas.find((c) => c.indice === i && px >= c.x0 && px < c.x1);
+      if (!celda) return;
+      e.preventDefault();
       const b = g.bandas[i];
-      const centroY = rect.top + ((b.y0 + b.y1) / 2) * fEscY;
-      const bordeTabla = rect.left + g.tablaX * fEscX;
-      let mejor: { left: number; top: number; width: number; height: number } | null = null;
-      let menor = 8;
-      for (const tv of caja.querySelectorAll("svg text")) {
-        const r = tv.getBoundingClientRect();
-        if (r.width <= 0 || r.right > bordeTabla + 1) continue;
-        const dcentro = Math.abs(r.top + r.height / 2 - centroY);
-        if (dcentro <= menor && r.left >= rect.left - 1) {
-          menor = dcentro;
-          mejor = {
-            left: r.left - rect.left - 2,
-            top: r.top - rect.top - 2,
-            width: r.width + 4,
-            height: r.height + 4,
-          };
-        }
-      }
-      if (!mejor) return;
+      const valorInicial =
+        celda.campo === "nombre"
+          ? t.nombre
+          : (() => {
+              const v = leerCampo(textoRef.current, t.id, celda.campo);
+              return v == null ? "" : String(v);
+            })();
       setSeleccion({ codigo: t.id });
-      setRenombrando({ codigo: t.id, valor: t.nombre, rect: mejor });
+      setEditandoCelda({
+        codigo: t.id,
+        campo: celda.campo,
+        valor: valorInicial,
+        rect: {
+          left: rect.left + celda.x0 * fEscX,
+          top: rect.top + b.y0 * fEscY,
+          width: (celda.x1 - celda.x0) * fEscX,
+          height: (b.y1 - b.y0) * fEscY,
+        },
+      });
     },
-    [indiceDePunto, tareas, geometria],
+    [tareas, geometria],
   );
 
-  const commitRenombre = useCallback(
+  const commitEdicionCelda = useCallback(
     (valor: string) => {
-      setRenombrando((r) => {
-        if (!r) return r;
+      setEditandoCelda((e) => {
+        if (!e) return e;
         const v = valor.trim();
-        if (v && v !== r.valor) {
-          try {
-            ponerEnEditor(editarCampo(textoRef.current, r.codigo, "nombre", v));
-          } catch (err) {
-            setMensaje(`Error al renombrar: ${String(err)}`);
+        try {
+          if (e.campo === "nombre") {
+            if (v && v !== e.valor) ponerEnEditor(editarCampo(textoRef.current, e.codigo, "nombre", v));
+            return null;
           }
+          const actual = leerCampo(textoRef.current, e.codigo, e.campo);
+          if (v === (actual == null ? "" : String(actual))) return null;
+          ponerEnEditor(editarCampoConsistente(textoRef.current, e.codigo, e.campo, coerceValorCelda(e.campo, v)));
+        } catch (err) {
+          setMensaje(`Error al editar '${e.campo}': ${String(err)}`);
         }
         return null;
       });
@@ -1337,7 +1368,7 @@ const filas = filasPanel;
         ? "ok"
         : "compilando";
 
-  const columnas = `1fr${seleccion ? " 1px 320px" : " 0px 0px"}`;
+  const columnas = "1fr";
 
   return (
     <div className="app">
@@ -1475,7 +1506,7 @@ const filas = filasPanel;
               onPointerMove={moverArrastre}
               onPointerUp={terminarArrastre}
               onPointerCancel={terminarArrastre}
-              title="Clic: propiedades · arrastra barras para mover/estirar · doble clic: acciones · clic derecho: menú · Ctrl+rueda: zoom"
+              title="Clic: propiedades · arrastra barras para mover/estirar · doble clic en celda: editar · clic derecho: menú · Ctrl+rueda: zoom"
             >
               <div
                 dangerouslySetInnerHTML={{ __html: svg }}
@@ -1494,21 +1525,22 @@ const filas = filasPanel;
                   }}
                 />
               )}
-              {renombrando && (
+              {editandoCelda && (
                 <input
                   className="renombrar-carta"
-                  style={renombrando.rect}
-                  defaultValue={renombrando.valor}
+                  style={editandoCelda.rect}
+                  defaultValue={editandoCelda.valor}
                   autoFocus
+                  spellCheck={false}
                   onFocus={(ev) => ev.currentTarget.select()}
                   onClick={(ev) => ev.stopPropagation()}
-                  onBlur={(ev) => commitRenombre(ev.currentTarget.value)}
+                  onBlur={(ev) => commitEdicionCelda(ev.currentTarget.value)}
                   onKeyDown={(ev) => {
                     if (ev.key === "Enter") {
                       ev.preventDefault();
                       ev.currentTarget.blur();
                     } else if (ev.key === "Escape") {
-                      setRenombrando(null);
+                      setEditandoCelda(null);
                     }
                   }}
                 />
@@ -1525,26 +1557,23 @@ const filas = filasPanel;
           )}
         </section>
 
-        {seleccion && (
-          <>
-            <div className="panel-derecha-sep" />
-            <aside className="panel-propiedades-dock">
-              {camposTarea && (
-                <PropiedadesTarea
-                  codigo={seleccion.codigo}
-                  nombre={String(camposTarea.nombre ?? seleccion.codigo)}
-                  campos={camposTarea}
-                  onAplicar={aplicarCampoTarea}
-                  onCerrar={() => setSeleccion(null)}
-                  onAbrirPredecesoras={() =>
-                    abrirPredecesoras(seleccion.codigo, String(camposTarea.nombre ?? seleccion.codigo))
-                  }
-                  onAbrirApu={() => setApuAbierto({ codigo: seleccion.codigo })}
-                  onAbrirRecursos={() => setRecursosAbierto(true)}
-                />
-              )}
-            </aside>
-          </>
+        {seleccion && camposTarea && (
+          <div className="panel-propiedades-fondo" onClick={() => setSeleccion(null)}>
+            <div className="panel-propiedades-popup" onClick={(ev) => ev.stopPropagation()}>
+              <PropiedadesTarea
+                codigo={seleccion.codigo}
+                nombre={String(camposTarea.nombre ?? seleccion.codigo)}
+                campos={camposTarea}
+                onAplicar={aplicarCampoTarea}
+                onCerrar={() => setSeleccion(null)}
+                onAbrirPredecesoras={() =>
+                  abrirPredecesoras(seleccion.codigo, String(camposTarea.nombre ?? seleccion.codigo))
+                }
+                onAbrirApu={() => setApuAbierto({ codigo: seleccion.codigo })}
+                onAbrirRecursos={() => setRecursosAbierto(true)}
+              />
+            </div>
+          </div>
         )}
       </main>
       {diagnosticos.length > 0 && (

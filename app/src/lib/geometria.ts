@@ -32,4 +32,10 @@ export interface Geometria {
   calendario?: { x0: number; y0: number; y1: number };
   /** Cabecera de las columnas de datos (a la izquierda del calendario). */
   columnas?: { x0: number; x1: number; y0: number; y1: number };
+  /**
+   * Celdas de la tabla (nombre y columnas de datos editables) para el doble
+   * clic inline: `indice` = fila (mismo orden que `bandas`), `campo` = clave de
+   * la actividad a editar, `x0`/`x1` = extensión horizontal de la celda.
+   */
+  celdas?: { indice: number; campo: string; x0: number; x1: number }[];
 }

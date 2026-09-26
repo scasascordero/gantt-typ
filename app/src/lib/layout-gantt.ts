@@ -574,7 +574,7 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
     unidad: "unidad",
     "costo-unitario": "costo-unitario",
   };
-  const celdas: { indice: number; campo: string; x0: number; x1: number }[] = [];
+  const celdas: { indice: number; campo: string; codigo: string; x0: number; x1: number }[] = [];
 
   visibles.forEach((f, i) => {
     const yFilaTop = y0 + i * altoFilaPx;
@@ -584,11 +584,11 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
     if (f.id) filasPorId.set(f.id, f);
     filasPorCodigo.set(f.codigo, f);
 
-    celdas.push({ indice: i, campo: "nombre", x0: 0, x1: anchoNombreFinal });
+    celdas.push({ indice: i, campo: "nombre", codigo: f.codigo, x0: 0, x1: anchoNombreFinal });
     for (let j = 0; j < mostrarColumnas.length; j++) {
       const campo = COL_CAMPO[mostrarColumnas[j]];
       if (!campo) continue;
-      celdas.push({ indice: i, campo, x0: colXInicios[j], x1: colXInicios[j] + anchosColumnas[j] });
+      celdas.push({ indice: i, campo, codigo: f.codigo, x0: colXInicios[j], x1: colXInicios[j] + anchosColumnas[j] });
     }
 
     // Nivel de texto por fila (paridad gantt.typ): negrita manual o nivel 0.

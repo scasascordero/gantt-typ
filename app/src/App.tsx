@@ -353,6 +353,14 @@ const filas = filasPanel;
   }, [texto, nivelActual]);
   const tareasTodas = useMemo(() => listarTareas(texto), [texto]);
 
+  // Filas realmente dibujadas por el layout (tras poda de ocultar-subtareas y
+  // colapso): fuente de verdad para las interacciones. Se resuelven por
+  // `codigo` porque `tareas`/`listarTareas` puede divergir en número y orden.
+  const filasPorCodigo = useMemo(
+    () => new Map((filasPanel ?? []).map((f) => [f.codigo, f] as const)),
+    [filasPanel],
+  );
+
   // "Colapsar" avanza un nivel por clic: 1, 2, … hasta cubrir el nivel más
   // profundo y vuelve a "todos". `mostrar-niveles: k` muestra nivel < k.
   const maxNivel = useMemo(() => tareasTodas.reduce((m, t) => Math.max(m, t.nivel), 0), [tareasTodas]);
@@ -412,9 +420,10 @@ const filas = filasPanel;
         setPropiedadesAbierto(null);
         return;
       }
-      if (!geometria?.bandas[i]?.codigo) return;
+      const codigo = geometria?.bandas[i]?.codigo;
+      if (!geometria || codigo === undefined) return;
       setMenuTarea(null);
-      setSeleccion({ codigo: geometria.bandas[i].codigo });
+      setSeleccion({ codigo });
       setPropiedadesAbierto(null);
     },
     [indiceDePunto, geometria],
@@ -459,15 +468,16 @@ const filas = filasPanel;
         return;
       }
       const i = indiceDePunto(e);
-      if (i >= 0 && tareas[i]) {
+      const fila = i >= 0 ? filasPorCodigo.get(geometria.bandas[i]?.codigo ?? "") : undefined;
+      if (fila) {
         e.preventDefault();
         // clic derecho en una fila: selecciona y abre las acciones de tarea
-        setSeleccion({ codigo: tareas[i].id });
+        setSeleccion({ codigo: fila.codigo });
         setPropiedadesAbierto(null);
-        setMenuTarea({ x: e.clientX, y: e.clientY, codigo: tareas[i].id, nombre: tareas[i].nombre });
+        setMenuTarea({ x: e.clientX, y: e.clientY, codigo: fila.codigo, nombre: fila.nombre });
       }
     },
-    [indiceDePunto, tareas, geometria],
+    [indiceDePunto, filasPorCodigo, geometria],
   );
 
   const alDobleClicCarta = useCallback(
@@ -485,30 +495,33 @@ const filas = filasPanel;
       const px = (e.clientX - rect.left) * fEscX;
       const py = (e.clientY - rect.top) * fEscY;
       const i = g.bandas.findIndex((b) => py >= b.y0 && py < b.y1);
-      const t = tareas[i];
-      if (i < 0 || !t) return;
+      if (i < 0) return;
+      // La fila dibujada (bandas/celdas) es la fuente de verdad: `codigo` puede
+      // diferir de `tareas[i]` bajo `ocultar-subtareas`/colapso.
+      const b = g.bandas[i];
+      const fila = filasPorCodigo.get(b.codigo);
+      if (!fila) return;
       e.preventDefault();
       setMenuTarea(null);
-      setSeleccion({ codigo: t.id });
+      setSeleccion({ codigo: fila.codigo });
       setPropiedadesAbierto(null);
-      const b = g.bandas[i];
       // 1) Doble clic sobre una celda editable → editor inline de esa celda.
       const celda = (g.celdas ?? []).find((c) => c.indice === i && px >= c.x0 && px < c.x1);
       if (celda) {
         const valorInicial =
           celda.campo === "nombre"
-            ? t.nombre
+            ? fila.nombre
             : (() => {
-                const v = leerCampo(textoRef.current, t.id, celda.campo);
+                const v = leerCampo(textoRef.current, fila.codigo, celda.campo);
                 return v == null ? "" : String(v);
               })();
         setEditandoCelda({
-          codigo: t.id,
+          codigo: fila.codigo,
           campo: celda.campo,
           valor: valorInicial,
           rect: {
             // Coordenadas relativas a svg-hoja (sin el offset de la ventana):
-            // coincide con el resaltado de la fila.
+            // coinciden con el resaltado de la fila.
             left: celda.x0 * fEscX,
             top: b.y0 * fEscY,
             width: (celda.x1 - celda.x0) * fEscX,
@@ -518,9 +531,9 @@ const filas = filasPanel;
         return;
       }
       // 2) Resto de la actividad (barra, fila, columnas calculadas) → popup.
-      setPropiedadesAbierto(t.id);
+      setPropiedadesAbierto(fila.codigo);
     },
-    [tareas, geometria],
+    [filasPorCodigo, geometria],
   );
 
   const commitEdicionCelda = useCallback(

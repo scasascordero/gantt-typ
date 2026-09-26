@@ -15,7 +15,7 @@ export interface Rect {
 export interface Banda {
   y0: number;
   y1: number;
-  codigo?: string;
+  codigo: string;
 }
 
 export interface Geometria {
@@ -35,7 +35,10 @@ export interface Geometria {
   /**
    * Celdas de la tabla (nombre y columnas de datos editables) para el doble
    * clic inline: `indice` = fila (mismo orden que `bandas`), `campo` = clave de
-   * la actividad a editar, `x0`/`x1` = extensión horizontal de la celda.
+   * la actividad a editar, `x0`/`x1` = extensión horizontal de la celda y
+   * `codigo` = la actividad realmente dibujada en esa fila (poda incluida).
+   * La interacción debe resolverse por `codigo`, nunca por índice contra otra
+   * lista (listarTareas puede diverger con `ocultar-subtareas`/colapso).
    */
-  celdas?: { indice: number; campo: string; x0: number; x1: number }[];
+  celdas?: { indice: number; campo: string; codigo: string; x0: number; x1: number }[];
 }

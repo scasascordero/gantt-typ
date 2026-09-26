@@ -569,6 +569,27 @@
   // los grupos son solo el "sobre" de sus hijas y no participan en la red.
   let es-hoja(codigo) = not (codigo in indice.hijos-de)
 
+  // Hojas y subtareas (de cualquier nivel) que contiene un grupo.
+  let hojas-de(codigo) = {
+    let hs = indice.hijos-de.at(codigo, default: ())
+    if hs.len() == 0 { (codigo,) } else { hs.map(hojas-de).flatten() }
+  }
+  let descendientes(codigo) = {
+    indice.hijos-de.at(codigo, default: ()).map(h => (h,) + descendientes(h)).flatten()
+  }
+
+  // Un grupo no puede depender de una de sus propias subtareas.
+  for it in plano {
+    if es-hoja(it.codigo) { continue }
+    let desc = descendientes(it.codigo)
+    for d in interpretar-predecesoras(it.at("predecesoras", default: none)).map(a-dep-codigo) {
+      assert(
+        not (d.pred in desc),
+        message: "El grupo '" + it.codigo + "' no puede depender de su propia subtarea '" + d.pred + "'",
+      )
+    }
+  }
+
   let res-cpm = none
   let fechas-de = none
   let critico-de = none
@@ -613,8 +634,14 @@
         predecesoras: interpretar-predecesoras(it.at("predecesoras", default: none)).map(a-dep-codigo),
       ))
     }
+    // Grupos -> sus hojas: una dependencia puede apuntar a un grupo.
+    let grupos = (:)
+    for it in plano {
+      if not es-hoja(it.codigo) { grupos.insert(it.codigo, hojas-de(it.codigo)) }
+    }
     let r = calcular-cpm(
       hojas,
+      grupos: grupos,
       inicio-proyecto: dia-proyecto,
       termino-proyecto: dia-proyecto-term,
     )

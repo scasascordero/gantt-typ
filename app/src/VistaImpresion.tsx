@@ -88,9 +88,6 @@ export default function VistaImpresion({
           ) : listo ? (
             estado.hojas.map((svg, i) => (
               <section key={i} className="vista-impresion-pagina" aria-label={`Página ${i + 1}`}>
-                <header className="vista-impresion-pagina-titulo">
-                  Página {i + 1} de {estado.hojas.length}
-                </header>
                 <div className="vista-impresion-svg" dangerouslySetInnerHTML={{ __html: svg }} />
               </section>
             ))

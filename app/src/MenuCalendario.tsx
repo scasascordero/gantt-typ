@@ -2,6 +2,7 @@
 // del calendario: edición rápida de los parámetros del grupo "Calendario".
 
 import { PARAMETROS, type Valor } from "./lib/params";
+import { cerrarYReenviarClicDerecho } from "./lib/menuContextual";
 import { Fila } from "./MenuParametros";
 
 interface Props {
@@ -24,7 +25,7 @@ export default function MenuCalendario({ x, y, valores, ventanaCalculada, onCamb
   };
   return (
     <>
-      <div className="menu-fondo" onClick={onCerrar} onContextMenu={(e) => e.preventDefault()} />
+      <div className="menu-fondo" onClick={onCerrar} onContextMenu={(e) => cerrarYReenviarClicDerecho(e, onCerrar)} />
       <div
         className="menu-calendario"
         style={{

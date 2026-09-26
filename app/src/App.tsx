@@ -496,18 +496,7 @@ function App() {
       if (rect.width <= 0 || rect.height <= 0) return;
       const py = (e.clientY - rect.top) * (g.ancho / rect.width);
       const px = (e.clientX - rect.left) * (g.ancho / rect.width);
-      // Botón derecho sobre las celdas de cabecera de las columnas de datos.
-      if (
-        g.columnas &&
-        py >= g.columnas.y0 &&
-        py < g.columnas.y1 &&
-        px >= g.columnas.x0 &&
-        px < g.columnas.x1
-      ) {
-        e.preventDefault();
-        setMenuColumnas({ x: e.clientX, y: e.clientY });
-        return;
-      }
+      // La cabecera de las columnas de datos es la tabla HTML (tiene su propio menú).
       // Botón derecho sobre la cabecera del calendario: menú de calendario.
       if (g.calendario && py >= g.calendario.y0 && py < g.calendario.y1 && px >= g.calendario.x0) {
         e.preventDefault();

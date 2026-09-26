@@ -2,6 +2,7 @@
 // cabecera de las columnas de datos: qué columnas se muestran en la carta.
 
 import { PARAMETROS, type Valor } from "./lib/params";
+import { cerrarYReenviarClicDerecho } from "./lib/menuContextual";
 import { Fila } from "./MenuParametros";
 
 interface Props {
@@ -17,7 +18,7 @@ export default function MenuColumnas({ x, y, valores, onCambiar, onVerMas, onCer
   const p = PARAMETROS.find((q) => q.clave === "mostrar-columnas");
   return (
     <>
-      <div className="menu-fondo" onClick={onCerrar} onContextMenu={(e) => e.preventDefault()} />
+      <div className="menu-fondo" onClick={onCerrar} onContextMenu={(e) => cerrarYReenviarClicDerecho(e, onCerrar)} />
       <div
         className="menu-columna"
         style={{

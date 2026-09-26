@@ -3,6 +3,7 @@
 // hermana/subtarea y borrar. Las mutaciones se aplican al texto del editor.
 
 import { useState } from "react";
+import { cerrarYReenviarClicDerecho } from "./lib/menuContextual";
 import {
   anadirHermana,
   anadirSubtarea,
@@ -87,7 +88,7 @@ export default function MenuTarea({
 
   return (
     <>
-      <div className="menu-fondo" onClick={onCerrar} onContextMenu={(e) => e.preventDefault()} />
+      <div className="menu-fondo" onClick={onCerrar} onContextMenu={(e) => cerrarYReenviarClicDerecho(e, onCerrar)} />
       <div
         className="menu-tarea"
         style={{

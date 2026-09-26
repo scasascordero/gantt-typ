@@ -429,21 +429,87 @@ body,
   border-radius: 3px;
 }
 
-/* Edición inline de una celda con doble clic (dentro de svg-hoja). Por encima
-   del popup de propiedades (z 54) para poder escribir sin que el fondo
-   translúcido lo tape. */
-.renombrar-carta {
+/* Tabla HTML que replica el área izquierda del SVG (nombre + columnas) en el
+   MISMO espacio con el zoom ya aplicado: se posiciona con porcentajes sacados
+   de `geometria` (celdas/bandas), así las filas quedan alineadas con las
+   barras siempre. La edición es un <input> real dentro de la celda; el área
+   sin celdas deja pasar los eventos al contenedor (selección, menús).
+   El resaltado de fila (rectSel, z 1) queda debajo del z 2 de la tabla. */
+.tabla-html {
   position: absolute;
-  z-index: 56;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.tabla-html * {
+  pointer-events: auto;
+}
+.tabla-html-cabecera {
+  position: absolute;
+  left: 0;
+  right: 0;
   box-sizing: border-box;
-  padding: 0 2px;
-  border: 1px solid #2563eb;
-  border-radius: 3px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+.tabla-html-cab {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.tabla-html-der {
+  justify-content: flex-end;
+}
+.tabla-html-celda {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 3px;
   background: #ffffff;
-  font-family: inherit;
-  font-size: 12px;
-  color: #0f172a;
+  border-bottom: 1px solid #eef2f7;
+  font-size: 11px;
+  line-height: 1;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.tabla-html-celda span {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tabla-html-celda-grupo {
+  font-weight: 600;
+}
+.tabla-html-celda-sel {
+  background: #eff6ff;
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+.tabla-html-input {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 1px solid #2563eb;
+  border-radius: 2px;
+  background: #ffffff;
+  font: inherit;
+  color: inherit;
   outline: none;
+  padding: 0 2px;
 }
 
 /* Ventana de propiedades de la actividad seleccionada: popup centrado para no

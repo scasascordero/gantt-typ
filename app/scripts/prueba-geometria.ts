@@ -156,6 +156,24 @@ function probarFixture(nombre: string, filas: Fila[], p: Record<string, Valor>) 
   for (const c of celdas) celdasPorFila.set(c.indice, (celdasPorFila.get(c.indice) ?? 0) + 1);
   pasa("cada fila tiene su celda de nombre", g.bandas.every((_b, k) => (celdasPorFila.get(k) ?? 0) >= 1));
 
+  // 2b) las celdas quedan dentro de la tabla y el encabezado tiene tamaño
+  const tabX = g.tablaX ?? 0;
+  const fueraDeTabla = tabX <= 0 || celdas.some((c) => c.x0 < 0 || c.x1 > tabX);
+  pasa("todas las celdas dentro de [0, tablaX]", !fueraDeTabla, fueraDeTabla ? "celda fuera de la tabla" : "");
+  pasa("altoEncabezado > 0", (g.altoEncabezado ?? 0) > 0);
+  const topEnc = (g.bandas[0]?.y0 ?? g.altoEncabezado) - g.altoEncabezado;
+  pasa("el encabezado de la tabla arranca sobre la primera banda", topEnc >= 0);
+
+  // 2c) columnas derivadas presentes y con editable=false; nombre editable
+  const constantes = celdas.filter((c) => c.editable === false);
+  const editables = celdas.filter((c) => c.editable === true);
+  pasa("hay columnas derivadas marcadas como no editables", constantes.length > 0 || !celdas.some((c) => c.campo !== "nombre"));
+  pasa("hay celdas editables (nombre + columnas de datos)", editables.length > 0);
+  pasa(
+    "la celda de nombre es editable",
+    celdas.every((c) => c.campo !== "nombre" || c.editable === true),
+  );
+
   // 3) hit-test del doble clic: probamos el punto central de cada celda
   const ordenDibujadas = g.bandas.map((b) => b.codigo);
   for (let k = 0; k < g.bandas.length; k++) {
@@ -198,7 +216,7 @@ probarFixture(
   "poda por ocultar-subtareas",
   fixtureConPoda(),
   params({
-    "mostrar-columnas": ["duracion", "avance", "costo-unitario"],
+    "mostrar-columnas": ["duracion", "avance", "costo-unitario", "costo", "holgura", "critico", "inicio-temprano", "termino-tardio"],
     "mostrar-niveles": "auto",
   }),
 );
@@ -207,7 +225,7 @@ probarFixture(
   "colapso por mostrar-niveles=3 (nivel < 3)",
   fixtureSimple(),
   params({
-    "mostrar-columnas": ["duracion", "inicio", "termino"],
+    "mostrar-columnas": ["duracion", "inicio", "termino", "costo", "critico"],
     "mostrar-niveles": "3",
   }),
 );
@@ -216,7 +234,7 @@ probarFixture(
   "proyecto + columnas, sin poda",
   fixtureSimple(),
   params({
-    "mostrar-columnas": ["duracion", "avance", "cantidad", "unidad", "costo-unitario"],
+    "mostrar-columnas": ["duracion", "avance", "cantidad", "unidad", "costo-unitario", "costo"],
     "mostrar-niveles": "auto",
   }),
 );

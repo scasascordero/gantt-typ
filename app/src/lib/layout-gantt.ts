@@ -160,6 +160,76 @@ function formatearImporte(v: number): string {
   return (entero < 0 ? "-" : "") + out + fs;
 }
 
+// --- Textos de las columnas (compartidos por el SVG y la tabla HTML) ---------
+
+export const ETIQUETAS: Record<string, string> = {
+  duracion: "Duración",
+  inicio: "Inicio",
+  termino: "Término",
+  avance: "Avance",
+  cantidad: "Cantidad",
+  unidad: "Unidad",
+  "costo-unitario": "C. unitario",
+  costo: "Costo",
+  holgura: "Holgura",
+  critico: "Crít.",
+  "inicio-temprano": "Ini. temp.",
+  "termino-temprano": "Fin. temp.",
+  "inicio-tardio": "Ini. tardío",
+  "termino-tardio": "Fin. tardío",
+};
+
+// Columnas cuyo valor se edita escribiendo un campo del YAML (el resto son
+// derivadas: costo, holgura, crítico, fechas tempranas/tardías).
+export const COL_CAMPO: Record<string, string> = {
+  duracion: "duracion",
+  inicio: "inicio",
+  termino: "termino",
+  avance: "avance",
+  cantidad: "cantidad",
+  unidad: "unidad",
+  "costo-unitario": "costo-unitario",
+};
+
+export function esColumnaDerecha(col: string): boolean {
+  return col === "cantidad" || col === "costo-unitario" || col === "costo";
+}
+
+export function valorColumna(f: Fila, col: string): string {
+  switch (col) {
+    case "duracion":
+      return String(f.duracion);
+    case "inicio":
+      return formatearFecha(f.inicioDias);
+    case "termino":
+      return formatearFecha(f.terminoDias);
+    case "avance":
+      return Math.round(f.avance * 100) + "%";
+    case "cantidad":
+      return f.cantidad == null ? "" : formatearImporte(f.cantidad);
+    case "unidad":
+      return f.unidad ?? "";
+    case "costo-unitario":
+      return f.costoUnitario == null ? "" : formatearImporte(f.costoUnitario);
+    case "costo":
+      return f.costo == null ? "" : formatearImporte(f.costo);
+    case "holgura":
+      return f.holgura == null ? "" : String(f.holgura);
+    case "critico":
+      return f.critico ? "C" : "";
+    case "inicio-temprano":
+      return f.holgura == null ? "" : formatearFecha(f.inicioDias);
+    case "termino-temprano":
+      return f.holgura == null ? "" : formatearFecha(f.terminoDias);
+    case "inicio-tardio":
+      return f.holgura == null ? "" : formatearFecha(f.inicioDias + f.holgura);
+    case "termino-tardio":
+      return f.holgura == null ? "" : formatearFecha(f.terminoDias + f.holgura);
+    default:
+      return "";
+  }
+}
+
 // --- El render principal ----------------------------------------------------
 
 export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): VistaGantt {
@@ -223,7 +293,7 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
   if (visibles.length === 0) {
     return {
       svg: "",
-      geometria: { ancho: 0, alto: 0, bandas: [], barras: [], tablaX: 0, dias: { inicio: 0, fin: 0 } },
+      geometria: { ancho: 0, alto: 0, bandas: [], barras: [], tablaX: 0, altoEncabezado: 0, dias: { inicio: 0, fin: 0 } },
       milis: performance.now() - t0,
     };
   }
@@ -268,58 +338,6 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
   }
 
   // --- Columnas de datos opcionales -----------------------------------------
-  const ETIQUETAS: Record<string, string> = {
-    duracion: "Duración",
-    inicio: "Inicio",
-    termino: "Término",
-    avance: "Avance",
-    cantidad: "Cantidad",
-    unidad: "Unidad",
-    "costo-unitario": "C. unitario",
-    costo: "Costo",
-    holgura: "Holgura",
-    critico: "Crít.",
-    "inicio-temprano": "Ini. temp.",
-    "termino-temprano": "Fin. temp.",
-    "inicio-tardio": "Ini. tardío",
-    "termino-tardio": "Fin. tardío",
-  };
-  const valorColumna = (f: Fila, col: string): string => {
-    switch (col) {
-      case "duracion":
-        return String(f.duracion);
-      case "inicio":
-        return formatearFecha(f.inicioDias);
-      case "termino":
-        return formatearFecha(f.terminoDias);
-      case "avance":
-        return Math.round(f.avance * 100) + "%";
-      case "cantidad":
-        return f.cantidad == null ? "" : formatearImporte(f.cantidad);
-      case "unidad":
-        return f.unidad ?? "";
-      case "costo-unitario":
-        return f.costoUnitario == null ? "" : formatearImporte(f.costoUnitario);
-      case "costo":
-        return f.costo == null ? "" : formatearImporte(f.costo);
-      case "holgura":
-        return f.holgura == null ? "" : String(f.holgura);
-      case "critico":
-        return f.critico ? "C" : "";
-      case "inicio-temprano":
-        return f.holgura == null ? "" : formatearFecha(f.inicioDias);
-      case "termino-temprano":
-        return f.holgura == null ? "" : formatearFecha(f.terminoDias);
-      case "inicio-tardio":
-        return f.holgura == null ? "" : formatearFecha(f.inicioDias + f.holgura);
-      case "termino-tardio":
-        return f.holgura == null ? "" : formatearFecha(f.terminoDias + f.holgura);
-      default:
-        return "";
-    }
-  };
-  const esColumnaDerecha = (col: string): boolean =>
-    col === "cantidad" || col === "costo-unitario" || col === "costo";
   const bold = (s: string) => medir(s, tamanoFuente, "bold", "normal", fuente);
 
   const anchosColumnas = mostrarColumnas.map((col) => {
@@ -563,18 +581,9 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
   const barras: { x: number; y: number; w: number; h: number; cx: number; cy: number; codigo: string }[] = [];
   const filasPorId = new Map<string, Fila>();
   const filasPorCodigo = new Map<string, Fila>();
-  // Columnas que se editan escribiendo un campo de la actividad (el resto son
-  // derivadas: costo, holgura, crítico, fechas tempranas/tardías).
-  const COL_CAMPO: Record<string, string> = {
-    duracion: "duracion",
-    inicio: "inicio",
-    termino: "termino",
-    avance: "avance",
-    cantidad: "cantidad",
-    unidad: "unidad",
-    "costo-unitario": "costo-unitario",
-  };
-  const celdas: { indice: number; campo: string; codigo: string; x0: number; x1: number }[] = [];
+  // Celdas de TODAS las columnas visibles (editables y derivadas) para que la
+  // tabla HTML pueda replicar el área izquierda del SVG pixel a pixel.
+  const celdas: { indice: number; campo: string; codigo: string; editable: boolean; x0: number; x1: number }[] = [];
 
   visibles.forEach((f, i) => {
     const yFilaTop = y0 + i * altoFilaPx;
@@ -584,11 +593,17 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
     if (f.id) filasPorId.set(f.id, f);
     filasPorCodigo.set(f.codigo, f);
 
-    celdas.push({ indice: i, campo: "nombre", codigo: f.codigo, x0: 0, x1: anchoNombreFinal });
+    celdas.push({ indice: i, campo: "nombre", codigo: f.codigo, editable: true, x0: 0, x1: anchoNombreFinal });
     for (let j = 0; j < mostrarColumnas.length; j++) {
       const campo = COL_CAMPO[mostrarColumnas[j]];
-      if (!campo) continue;
-      celdas.push({ indice: i, campo, codigo: f.codigo, x0: colXInicios[j], x1: colXInicios[j] + anchosColumnas[j] });
+      celdas.push({
+        indice: i,
+        campo: campo ?? mostrarColumnas[j],
+        codigo: f.codigo,
+        editable: campo != null,
+        x0: colXInicios[j],
+        x1: colXInicios[j] + anchosColumnas[j],
+      });
     }
 
     // Nivel de texto por fila (paridad gantt.typ): negrita manual o nivel 0.
@@ -728,6 +743,7 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
     barras,
     hoy: geometriaHoy,
     tablaX: anchoTabla,
+    altoEncabezado,
     dias: { inicio: diaMin, fin: diaMax },
     calendario: { x0: anchoTabla, y0: yDesp, y1: yDesp + altoEncabezado },
     columnas: mostrarColumnas.length > 0 ? { x0: anchoNombreFinal, x1: anchoTabla, y0: yDesp, y1: yDesp + altoEncabezado } : undefined,

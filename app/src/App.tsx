@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import ejemploDatos from "../../ejemplos/ejemplo_1.yaml?raw";
 import { fuentesLibreria, necesitaCpm } from "./lib/libreria";
 import { dibujarGantt, type VistaGantt } from "./lib/layout-gantt";
+import { TablaGantt, type CeldaEdicion } from "./TablaGantt";
 import { listarTareas } from "./lib/yamlLineas";
 import { validarTexto, idLibre } from "./lib/validacion";
 import { generarMainTyp, valoresDefault, type Valor } from "./lib/params";
@@ -199,13 +200,17 @@ function App() {
   const [mapaSel, setMapaSel] = useState<ColumnasExcel | null>(null);
   const [seleccion, setSeleccion] = useState<{ codigo: string } | null>(null);
   const [rectSel, setRectSel] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
-  const [editandoCelda, setEditandoCelda] = useState<{ codigo: string; campo: string; valor: string; rect: { left: number; top: number; width: number; height: number } } | null>(null);
+  const [editandoCelda, setEditandoCelda] = useState<CeldaEdicion | null>(null);
   // Popup de propiedades: se abre solo con doble clic sobre la actividad (el
   // clic simple sólo resalta la fila). Independiente de `seleccion` para poder
   // cerrarlo sin deseleccionar.
   const [propiedadesAbierto, setPropiedadesAbierto] = useState<string | null>(null);
 
   const nivelActual = String(parametros["mostrar-niveles"] ?? "auto");
+  const mostrarCodigo = (() => {
+    const v = parametros["mostrar-codigo"];
+    return v !== false && String(v ?? "true") !== "false";
+  })();
 
   const docActual = useMemo(
     () => docs.find((d) => d.id === idActivo) ?? docs[0],
@@ -490,47 +495,18 @@ const filas = filasPanel;
       const rect = s.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
       // Posición del clic en coordenadas del SVG (misma escala de `rectSel`).
-      const fEscX = g.ancho / rect.width;
       const fEscY = g.alto / rect.height;
-      const px = (e.clientX - rect.left) * fEscX;
       const py = (e.clientY - rect.top) * fEscY;
+      // La tabla HTML cubre el área de las celdas; aquí solo llegan los dobles
+      // clics sobre la línea de tiempo (barras) → propiedades de la actividad.
       const i = g.bandas.findIndex((b) => py >= b.y0 && py < b.y1);
       if (i < 0) return;
-      // La fila dibujada (bandas/celdas) es la fuente de verdad: `codigo` puede
-      // diferir de `tareas[i]` bajo `ocultar-subtareas`/colapso.
       const b = g.bandas[i];
       const fila = filasPorCodigo.get(b.codigo);
       if (!fila) return;
       e.preventDefault();
       setMenuTarea(null);
       setSeleccion({ codigo: fila.codigo });
-      setPropiedadesAbierto(null);
-      // 1) Doble clic sobre una celda editable → editor inline de esa celda.
-      const celda = (g.celdas ?? []).find((c) => c.indice === i && px >= c.x0 && px < c.x1);
-      if (celda) {
-        const valorInicial =
-          celda.campo === "nombre"
-            ? fila.nombre
-            : (() => {
-                const v = leerCampo(textoRef.current, fila.codigo, celda.campo);
-                return v == null ? "" : String(v);
-              })();
-        setEditandoCelda({
-          codigo: fila.codigo,
-          campo: celda.campo,
-          valor: valorInicial,
-          rect: {
-            // Coordenadas relativas a svg-hoja (sin el offset de la ventana):
-            // coinciden con el resaltado de la fila.
-            left: celda.x0 * fEscX,
-            top: b.y0 * fEscY,
-            width: (celda.x1 - celda.x0) * fEscX,
-            height: (b.y1 - b.y0) * fEscY,
-          },
-        });
-        return;
-      }
-      // 2) Resto de la actividad (barra, fila, columnas calculadas) → popup.
       setPropiedadesAbierto(fila.codigo);
     },
     [filasPorCodigo, geometria],
@@ -556,6 +532,50 @@ const filas = filasPanel;
       });
     },
     [ponerEnEditor],
+  );
+
+  // Abrir el editor inline de una celda de la tabla (valor crudo del YAML para
+  // que se vea como se guarda: "2024-01-15", "50%" o "1.5", no el formateado).
+  const abrirEdicionCelda = useCallback(
+    (codigo: string, campo: string) => {
+      if (campo === "nombre") {
+        const fila = filasPorCodigo.get(codigo);
+        setEditandoCelda({ codigo, campo, valor: fila?.nombre ?? "" });
+        return;
+      }
+      const valor = leerCampo(textoRef.current, codigo, campo);
+      setEditandoCelda({ codigo, campo, valor: valor == null ? "" : String(valor) });
+    },
+    [filasPorCodigo],
+  );
+  const cerrarEdicionCelda = useCallback(() => setEditandoCelda(null), []);
+  const seleccionarFila = useCallback(
+    (codigo: string) => {
+      setSeleccion({ codigo });
+      setPropiedadesAbierto(null);
+      setEditandoCelda(null);
+    },
+    [],
+  );
+  const abrirPropiedades = useCallback(
+    (codigo: string) => {
+      setSeleccion({ codigo });
+      setEditandoCelda(null);
+      setPropiedadesAbierto(codigo);
+    },
+    [],
+  );
+  const menutareaDesdeTabla = useCallback(
+    (clientX: number, clientY: number, codigo: string, nombre: string) => {
+      setSeleccion({ codigo });
+      setPropiedadesAbierto(null);
+      setMenuTarea({ x: clientX, y: clientY, codigo, nombre });
+    },
+    [],
+  );
+  const menucolumnasDesdeTabla = useCallback(
+    (clientX: number, clientY: number) => setMenuColumnas({ x: clientX, y: clientY }),
+    [],
   );
 
   // --- Arrastre/estirado de barras -------------------------------------------
@@ -1540,11 +1560,24 @@ const filas = filasPanel;
               onPointerCancel={terminarArrastre}
               title="Clic: selecciona fila · doble clic en celda: editar · doble clic en la actividad: propiedades · arrastra barras para mover/estirar · clic derecho: menú · Ctrl+rueda: zoom"
             >
-              <div
-                dangerouslySetInnerHTML={{ __html: svg }}
-                className="svg-hoja"
-                style={{ width: `${zoom * 100}%` }}
-              >
+              <div className="svg-hoja" style={{ width: `${zoom * 100}%` }}>
+                <div dangerouslySetInnerHTML={{ __html: svg }} />
+                {geometria && (
+                  <TablaGantt
+                    geometria={geometria}
+                    filasPorCodigo={filasPorCodigo}
+                    mostrarCodigo={mostrarCodigo}
+                    seleccion={seleccion}
+                    editando={editandoCelda}
+                    onSeleccionar={seleccionarFila}
+                    onEditar={abrirEdicionCelda}
+                    onPropiedades={abrirPropiedades}
+                    onCancelarEdicion={cerrarEdicionCelda}
+                    onCommitEdicion={commitEdicionCelda}
+                    onMenuCelda={menutareaDesdeTabla}
+                    onMenuCabecera={menucolumnasDesdeTabla}
+                  />
+                )}
               </div>
               {rectSel && (
                 <div
@@ -1554,26 +1587,6 @@ const filas = filasPanel;
                     left: rectSel.left,
                     width: rectSel.width,
                     height: rectSel.height,
-                  }}
-                />
-              )}
-              {editandoCelda && (
-                <input
-                  className="renombrar-carta"
-                  style={editandoCelda.rect}
-                  defaultValue={editandoCelda.valor}
-                  autoFocus
-                  spellCheck={false}
-                  onFocus={(ev) => ev.currentTarget.select()}
-                  onClick={(ev) => ev.stopPropagation()}
-                  onBlur={(ev) => commitEdicionCelda(ev.currentTarget.value)}
-                  onKeyDown={(ev) => {
-                    if (ev.key === "Enter") {
-                      ev.preventDefault();
-                      ev.currentTarget.blur();
-                    } else if (ev.key === "Escape") {
-                      setEditandoCelda(null);
-                    }
                   }}
                 />
               )}

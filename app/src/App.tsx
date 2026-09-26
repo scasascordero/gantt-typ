@@ -200,6 +200,10 @@ function App() {
   const [seleccion, setSeleccion] = useState<{ codigo: string } | null>(null);
   const [rectSel, setRectSel] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [editandoCelda, setEditandoCelda] = useState<{ codigo: string; campo: string; valor: string; rect: { left: number; top: number; width: number; height: number } } | null>(null);
+  // Popup de propiedades: se abre solo con doble clic sobre la actividad (el
+  // clic simple sólo resalta la fila). Independiente de `seleccion` para poder
+  // cerrarlo sin deseleccionar.
+  const [propiedadesAbierto, setPropiedadesAbierto] = useState<string | null>(null);
 
   const nivelActual = String(parametros["mostrar-niveles"] ?? "auto");
 
@@ -403,10 +407,15 @@ const filas = filasPanel;
   const alClicSvg = useCallback(
     (e: React.MouseEvent) => {
       const i = indiceDePunto(e);
-      if (i < 0) return;
+      if (i < 0) {
+        setMenuTarea(null);
+        setPropiedadesAbierto(null);
+        return;
+      }
       if (!geometria?.bandas[i]?.codigo) return;
       setMenuTarea(null);
       setSeleccion({ codigo: geometria.bandas[i].codigo });
+      setPropiedadesAbierto(null);
     },
     [indiceDePunto, geometria],
   );
@@ -454,6 +463,7 @@ const filas = filasPanel;
         e.preventDefault();
         // clic derecho en una fila: selecciona y abre las acciones de tarea
         setSeleccion({ codigo: tareas[i].id });
+        setPropiedadesAbierto(null);
         setMenuTarea({ x: e.clientX, y: e.clientY, codigo: tareas[i].id, nombre: tareas[i].nombre });
       }
     },
@@ -464,13 +474,12 @@ const filas = filasPanel;
     (e: React.MouseEvent) => {
       const g = geometria;
       const caja = svgCaja.current;
-      if (!g || !caja || !g.celdas || g.celdas.length === 0) return;
+      if (!g || !g.bandas.length || !caja) return;
       const s = caja.querySelector("svg");
       if (!s) return;
       const rect = s.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
-      // Posición del clic en coordenadas del SVG (escala = mismo build de la
-      // geometría, sin medición de <text> → robusto aunque el texto no exista).
+      // Posición del clic en coordenadas del SVG (misma escala de `rectSel`).
       const fEscX = g.ancho / rect.width;
       const fEscY = g.alto / rect.height;
       const px = (e.clientX - rect.left) * fEscX;
@@ -478,29 +487,38 @@ const filas = filasPanel;
       const i = g.bandas.findIndex((b) => py >= b.y0 && py < b.y1);
       const t = tareas[i];
       if (i < 0 || !t) return;
-      const celda = g.celdas.find((c) => c.indice === i && px >= c.x0 && px < c.x1);
-      if (!celda) return;
       e.preventDefault();
-      const b = g.bandas[i];
-      const valorInicial =
-        celda.campo === "nombre"
-          ? t.nombre
-          : (() => {
-              const v = leerCampo(textoRef.current, t.id, celda.campo);
-              return v == null ? "" : String(v);
-            })();
+      setMenuTarea(null);
       setSeleccion({ codigo: t.id });
-      setEditandoCelda({
-        codigo: t.id,
-        campo: celda.campo,
-        valor: valorInicial,
-        rect: {
-          left: rect.left + celda.x0 * fEscX,
-          top: rect.top + b.y0 * fEscY,
-          width: (celda.x1 - celda.x0) * fEscX,
-          height: (b.y1 - b.y0) * fEscY,
-        },
-      });
+      setPropiedadesAbierto(null);
+      const b = g.bandas[i];
+      // 1) Doble clic sobre una celda editable → editor inline de esa celda.
+      const celda = (g.celdas ?? []).find((c) => c.indice === i && px >= c.x0 && px < c.x1);
+      if (celda) {
+        const valorInicial =
+          celda.campo === "nombre"
+            ? t.nombre
+            : (() => {
+                const v = leerCampo(textoRef.current, t.id, celda.campo);
+                return v == null ? "" : String(v);
+              })();
+        setEditandoCelda({
+          codigo: t.id,
+          campo: celda.campo,
+          valor: valorInicial,
+          rect: {
+            // Coordenadas relativas a svg-hoja (sin el offset de la ventana):
+            // coincide con el resaltado de la fila.
+            left: celda.x0 * fEscX,
+            top: b.y0 * fEscY,
+            width: (celda.x1 - celda.x0) * fEscX,
+            height: (b.y1 - b.y0) * fEscY,
+          },
+        });
+        return;
+      }
+      // 2) Resto de la actividad (barra, fila, columnas calculadas) → popup.
+      setPropiedadesAbierto(t.id);
     },
     [tareas, geometria],
   );
@@ -578,6 +596,7 @@ const filas = filasPanel;
       if (!t) return;
       e.preventDefault();
       setSeleccion({ codigo: barra.codigo });
+      setPropiedadesAbierto(null);
       const diaIni = Math.round(diaEnPx(barra.x));
       const diaFin = Math.round(diaEnPx(barra.x + barra.w)) - 1;
       const enIzq = px <= barra.x + tol;
@@ -1506,7 +1525,7 @@ const filas = filasPanel;
               onPointerMove={moverArrastre}
               onPointerUp={terminarArrastre}
               onPointerCancel={terminarArrastre}
-              title="Clic: propiedades · arrastra barras para mover/estirar · doble clic en celda: editar · clic derecho: menú · Ctrl+rueda: zoom"
+              title="Clic: selecciona fila · doble clic en celda: editar · doble clic en la actividad: propiedades · arrastra barras para mover/estirar · clic derecho: menú · Ctrl+rueda: zoom"
             >
               <div
                 dangerouslySetInnerHTML={{ __html: svg }}
@@ -1557,15 +1576,15 @@ const filas = filasPanel;
           )}
         </section>
 
-        {seleccion && camposTarea && (
-          <div className="panel-propiedades-fondo" onClick={() => setSeleccion(null)}>
+        {seleccion && propiedadesAbierto === seleccion.codigo && camposTarea && (
+          <div className="panel-propiedades-fondo" onClick={() => setPropiedadesAbierto(null)}>
             <div className="panel-propiedades-popup" onClick={(ev) => ev.stopPropagation()}>
               <PropiedadesTarea
                 codigo={seleccion.codigo}
                 nombre={String(camposTarea.nombre ?? seleccion.codigo)}
                 campos={camposTarea}
                 onAplicar={aplicarCampoTarea}
-                onCerrar={() => setSeleccion(null)}
+                onCerrar={() => setPropiedadesAbierto(null)}
                 onAbrirPredecesoras={() =>
                   abrirPredecesoras(seleccion.codigo, String(camposTarea.nombre ?? seleccion.codigo))
                 }

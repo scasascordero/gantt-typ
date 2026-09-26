@@ -247,6 +247,8 @@ export function dibujarGantt(
     anchoDisponible?: number;
     /** Factor de zoom horizontal de la línea de tiempo (solo con `soloLineaTiempo`). */
     zoom?: number;
+    /** Píxeles por día fijados a mano (al arrastrar el borde de una celda del calendario); manda sobre `anchoDisponible`. */
+    anchoPorDia?: number;
   },
 ): VistaGantt {
   const t0 = performance.now();
@@ -317,31 +319,6 @@ export function dibujarGantt(
     };
   }
 
-  // --- Ventana temporal -----------------------------------------------------
-  let diaMin: number | null = null;
-  let diaMax: number | null = null;
-  try {
-    const vi = aDias(p["ventana-inicio"]);
-    const vf = aDias(p["ventana-fin"]);
-    if (vi !== null) diaMin = vi;
-    if (vf !== null) diaMax = vf;
-  } catch {
-    // fechas inválidas de la UI: se ignora y cae al mínimo/máximo de los datos
-  }
-  if (diaMin === null) diaMin = Math.min(...visibles.map((f) => f.inicioDias));
-  if (diaMax === null) diaMax = Math.max(...visibles.map((f) => f.terminoDias));
-  if (diaMax < diaMin) diaMax = diaMin;
-  const totalDias = diaMax - diaMin + 1;
-
-  const meses = mesesEnRango(diaMin, diaMax);
-  const mostrarAnio = aTriestado(p["nivel-anio"], new Set(meses.map((m) => m.anio)).size > 1);
-  const mostrarMes = aTriestado(p["nivel-mes"], true);
-  const mostrarSemana = aTriestado(p["nivel-semana"], totalDias <= 200);
-  const mostrarDia = aTriestado(p["nivel-dia"], totalDias <= 45);
-  const anios = mostrarAnio ? aniosEnRango(diaMin, diaMax) : [];
-  const semanas = mostrarSemana ? semanasEnRango(diaMin, diaMax) : [];
-  const dias = mostrarDia ? diasEnRango(diaMin, diaMax) : [];
-
   // --- Medición del ancho de la columna de nombres --------------------------
   const regular = (s: string) => medir(s, tamanoFuente, "regular", "normal", fuente);
   let anchoNombreFinal: number;
@@ -380,9 +357,49 @@ export function dibujarGantt(
   }
   const anchoTabla = anchoNombreFinal + anchosColumnas.reduce((a, b) => a + b, 0);
 
+  // --- Ventana temporal -----------------------------------------------------
+  let diaMin: number | null = null;
+  let diaMax: number | null = null;
+  try {
+    const vi = aDias(p["ventana-inicio"]);
+    const vf = aDias(p["ventana-fin"]);
+    if (vi !== null) diaMin = vi;
+    if (vf !== null) diaMax = vf;
+  } catch {
+    // fechas inválidas de la UI: se ignora y cae al mínimo/máximo de los datos
+  }
+  if (diaMin === null) diaMin = Math.min(...visibles.map((f) => f.inicioDias));
+  if (diaMax === null) diaMax = Math.max(...visibles.map((f) => f.terminoDias));
+  if (diaMax < diaMin) diaMax = diaMin;
+  // Con una escala fijada a mano (arrastrando el borde de una celda del
+  // calendario) que deja el calendario más angosto que el espacio disponible, se
+  // muestran más meses después de la ventana hasta llenarlo (la ventana visible
+  // no se respeta como tope). Se completa hasta el fin de mes.
+  if (solo && opts?.anchoPorDia !== undefined && opts.anchoDisponible !== undefined) {
+    const necesarios = Math.ceil((opts.anchoDisponible - anchoTabla) / opts.anchoPorDia);
+    if (necesarios > diaMax - diaMin + 1) {
+      const f = fechaDesdeDias(diaMin + necesarios - 1);
+      const [anioSig, mesSig] = f.mes === 12 ? [f.anio + 1, 1] : [f.anio, f.mes + 1];
+      diaMax = diasDesdeEpoca(anioSig, mesSig, 1) - 1;
+    }
+  }
+  const totalDias = diaMax - diaMin + 1;
+
+  const meses = mesesEnRango(diaMin, diaMax);
+  const mostrarAnio = aTriestado(p["nivel-anio"], new Set(meses.map((m) => m.anio)).size > 1);
+  const mostrarMes = aTriestado(p["nivel-mes"], true);
+  const mostrarSemana = aTriestado(p["nivel-semana"], totalDias <= 200);
+  const mostrarDia = aTriestado(p["nivel-dia"], totalDias <= 45);
+  const anios = mostrarAnio ? aniosEnRango(diaMin, diaMax) : [];
+  const semanas = mostrarSemana ? semanasEnRango(diaMin, diaMax) : [];
+  const dias = mostrarDia ? diasEnRango(diaMin, diaMax) : [];
+
+
   const anchoLineaTiempoParam = p["ancho-linea-tiempo"];
   const anchoLineaTiempo =
-    solo && opts?.anchoDisponible !== undefined
+    solo && opts?.anchoPorDia !== undefined
+      ? opts.anchoPorDia * totalDias
+      : solo && opts?.anchoDisponible !== undefined
       ? Math.max(cm(6), opts.anchoDisponible - anchoTabla) * (opts.zoom ?? 1)
       : (anchoLineaTiempoParam === "auto" || anchoLineaTiempoParam == null
           ? cm(20)
@@ -535,12 +552,17 @@ export function dibujarGantt(
     }
   };
 
+  const celdasCalendario: { x0: number; x1: number; y0: number; y1: number; dias: number }[] = [];
+  const celdaCal = (inicio: number, fin: number, y0c: number, y1c: number) =>
+    celdasCalendario.push({ x0: xDe(inicio), x1: xDe(fin + 1), y0: y0c, y1: y1c, dias: fin - inicio + 1 });
+
   // --- Encabezado: bandas de calendario -------------------------------------
   // Banda de años.
   if (mostrarAnio) {
     for (const a of anios) {
       const x1 = xDe(a.inicio);
       const x2 = xDe(a.fin + 1);
+      celdaCal(a.inicio, a.fin, 0, altoBandaAnio);
       out.push(rect(x1, 0, x2, altoBandaAnio, colorCalendario, colorRejilla, pt(0.4)));
       out.push(texto((x1 + x2) / 2, altoBandaAnio / 2, String(a.anio), { peso: "bold" }));
     }
@@ -550,6 +572,7 @@ export function dibujarGantt(
     for (const m of meses) {
       const x1 = xDe(m.inicio);
       const x2 = xDe(m.fin + 1);
+      celdaCal(m.inicio, m.fin, altoBandaAnio, altoBandaAnio + altoBandaMes);
       out.push(rect(x1, altoBandaAnio, x2, altoBandaAnio + altoBandaMes, colorCalendario, colorRejilla, pt(0.4)));
       out.push(texto((x1 + x2) / 2, altoBandaAnio + altoBandaMes / 2, NOMBRES_MES[m.mes - 1] ?? "", { peso: "bold" }));
     }
@@ -560,6 +583,7 @@ export function dibujarGantt(
       const x1 = xDe(s.inicio);
       const x2 = xDe(s.fin + 1);
       const yTop = altoBandaAnio + altoBandaMes;
+      celdaCal(s.inicio, s.fin, yTop, yTop + altoBandaSemana);
       out.push(rect(x1, yTop, x2, yTop + altoBandaSemana, colorCalendario, colorRejilla, pt(0.4)));
       if (mostrarDiaInicioSemana) {
         const diaInicio = fechaDesdeDias(s.inicio).dia;
@@ -580,6 +604,7 @@ export function dibujarGantt(
     const yTop = altoBandaAnio + altoBandaMes + altoBandaSemana;
     out.push(rect(xIni, yTop, anchoTotal, yTop + altoBandaDia, colorCalendario, colorRejilla, pt(0.4)));
     for (const d of dias) {
+      celdaCal(d.inicio, d.fin, yTop, yTop + altoBandaDia);
       out.push(linea(xDe(d.inicio), yTop, xDe(d.inicio), yTop + altoBandaDia, colorRejilla, trazoVertical));
       if (anchoPorDia >= cm(0.35)) {
         out.push(texto((xDe(d.inicio) + xDe(d.fin + 1)) / 2, yTop + altoBandaDia / 2, String(d.numero), { size: tamanoFuente * 0.75 }));
@@ -801,6 +826,7 @@ export function dibujarGantt(
     altoEncabezado,
     dias: { inicio: diaMin, fin: diaMax },
     calendario: { x0: xIni, y0: yDesp, y1: yDesp + altoEncabezado },
+    celdasCalendario: celdasCalendario.map((c) => ({ ...c, y0: c.y0 + yDesp, y1: c.y1 + yDesp })),
     columnas:
       mostrarColumnas.length > 0
         ? { x0: anchoNombreFinal, x1: anchoTabla, y0: yDesp, y1: yDesp + altoEncabezado }

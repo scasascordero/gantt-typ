@@ -36,6 +36,12 @@ export interface Geometria {
   dias?: { inicio: number; fin: number };
   /** Cabecera del calendario (sobre la primera banda), en el área de la línea de tiempo. */
   calendario?: { x0: number; y0: number; y1: number };
+  /**
+   * Celdas de las bandas del calendario (año, mes, semana, día) en coordenadas del
+   * SVG: `dias` = días que abarca la celda. Sirven para arrastrar sus bordes y
+   * reescalar todo el calendario (píxeles por día).
+   */
+  celdasCalendario?: { x0: number; x1: number; y0: number; y1: number; dias: number }[];
   /** Cabecera de las columnas de datos (a la izquierda del calendario). */
   columnas?: { x0: number; x1: number; y0: number; y1: number };
   /**

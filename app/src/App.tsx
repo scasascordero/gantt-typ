@@ -281,6 +281,9 @@ function App() {
   // En pantalla el SVG lleva solo calendario y barras (1:1 en px); la tabla es
   // HTML aparte. El zoom no entra aquí: se aplica como CSS a toda la carta.
   const [anchoCarta, setAnchoCarta] = useState(0);
+  // Escala del calendario fijada a mano arrastrando el borde de una celda de la
+  // cabecera (px por día); null = ajustado al ancho de la ventana.
+  const [pxPorDia, setPxPorDia] = useState<number | null>(null);
   const filasVista = useMemo(() => {
     if (!filasPanel || !previaArrastre) return filasPanel;
     return filasPanel.map((f) =>
@@ -309,8 +312,9 @@ function App() {
     return dibujarGantt(filas, p, seleccion?.codigo ?? undefined, {
       soloLineaTiempo: true,
       anchoDisponible: anchoCarta > 0 ? anchoCarta : undefined,
+      anchoPorDia: pxPorDia ?? undefined,
     });
-  }, [filasVista, parametros, previaArrastre, seleccion, anchoCarta]);
+  }, [filasVista, parametros, previaArrastre, seleccion, anchoCarta, pxPorDia]);
   const svg = vista?.svg ?? null;
   const geometria = vista?.geometria ?? null;
 
@@ -645,6 +649,62 @@ function App() {
     },
     [geometria],
   );
+
+  // --- Redimensionar el calendario arrastrando el borde de una celda -----------
+  // Se arrastra el borde derecho de una celda (día, semana, mes o año): su ancho
+  // nuevo fija los píxeles por día y todo el calendario se reescala en cadena.
+  const redimCalRef = useRef<{ x: number; ancho: number; dias: number; escala: number } | null>(null);
+  const PX_DIA_MIN = 0.3;
+  const PX_DIA_MAX = 300;
+
+  const bordeCalendarioEn = useCallback(
+    (e: React.PointerEvent | React.MouseEvent) => {
+      const g = geometria;
+      const svgEl = (e.currentTarget as HTMLElement).querySelector("svg");
+      if (!g?.celdasCalendario || !svgEl) return null;
+      const r = svgEl.getBoundingClientRect();
+      if (r.width <= 0 || !g.ancho) return null;
+      const escala = r.width / g.ancho;
+      const x = (e.clientX - r.left) / escala;
+      const y = (e.clientY - r.top) / escala;
+      const tol = 4;
+      const c = g.celdasCalendario.find((k) => y >= k.y0 && y < k.y1 && Math.abs(x - k.x1) <= tol && k.dias > 0);
+      return c ? { celda: c, escala } : null;
+    },
+    [geometria],
+  );
+
+  const iniciarRedimCal = useCallback(
+    (e: React.PointerEvent) => {
+      e.stopPropagation();
+      const hit = bordeCalendarioEn(e);
+      if (!hit) return;
+      e.preventDefault();
+      redimCalRef.current = { x: e.clientX, ancho: hit.celda.x1 - hit.celda.x0, dias: hit.celda.dias, escala: hit.escala };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [bordeCalendarioEn],
+  );
+
+  const moverRedimCal = useCallback(
+    (e: React.PointerEvent) => {
+      const d = redimCalRef.current;
+      if (!d) {
+        (e.currentTarget as HTMLElement).style.cursor = bordeCalendarioEn(e) ? "col-resize" : "";
+        return;
+      }
+      const ancho = d.ancho + (e.clientX - d.x) / d.escala;
+      setPxPorDia(Math.min(PX_DIA_MAX, Math.max(PX_DIA_MIN, ancho / d.dias)));
+    },
+    [bordeCalendarioEn],
+  );
+
+  const terminarRedimCal = useCallback((e: React.PointerEvent) => {
+    if (!redimCalRef.current) return;
+    redimCalRef.current = null;
+    const el = e.currentTarget as HTMLElement;
+    if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+  }, []);
 
   const iniciarArrastre = useCallback(
     (e: React.PointerEvent) => {
@@ -1622,9 +1682,16 @@ function App() {
                     <div
                       className="carta-cabecera"
                       style={{ height: geometria.altoEncabezado }}
+                      title="Arrastra el borde de una celda para cambiar el ancho del calendario · doble clic en un borde: ajustar a la ventana"
                       onClick={(e) => e.stopPropagation()}
-                      onDoubleClick={(e) => e.stopPropagation()}
-                      onPointerDown={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        if (bordeCalendarioEn(e)) setPxPorDia(null);
+                      }}
+                      onPointerDown={iniciarRedimCal}
+                      onPointerMove={moverRedimCal}
+                      onPointerUp={terminarRedimCal}
+                      onPointerCancel={terminarRedimCal}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();

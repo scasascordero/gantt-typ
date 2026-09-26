@@ -13,6 +13,7 @@ export interface Dep {
 
 export interface Fila {
   codigo: string;
+  id?: string;
   nombre: string;
   nivel: number;
   esGrupo: boolean;
@@ -25,6 +26,17 @@ export interface Fila {
   predecesoras: Dep[];
   critico?: boolean;
   holgura?: number;
+  cantidad?: number;
+  unidad?: string;
+  costoUnitario?: number;
+  costo?: number;
+  avanceSerie?: number[];
+  formatoBarra?: string;
+  negrita?: boolean;
+  italica?: boolean;
+  colorTexto?: string;
+  vinculo?: string;
+  ocultarSubtareas?: boolean;
 }
 
 type Crudo = unknown;

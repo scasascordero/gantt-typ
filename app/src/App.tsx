@@ -6,8 +6,8 @@ import { yaml } from "@codemirror/lang-yaml";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import ejemploDatos from "../../ejemplos/ejemplo_1.yaml?raw";
-import { compilarSvg, fuentesLibreria, necesitaCpm, inyectarFechasCpm } from "./lib/libreria";
-import { analizarSvg } from "./lib/geometria";
+import { fuentesLibreria, necesitaCpm } from "./lib/libreria";
+import { dibujarGantt, type VistaGantt } from "./lib/layout-gantt";
 import { listarTareas } from "./lib/yamlLineas";
 import { validarTexto, idLibre } from "./lib/validacion";
 import { generarMainTyp, valoresDefault, type Valor } from "./lib/params";
@@ -151,9 +151,6 @@ function App() {
     { id: "doc-1", nombre: "ejemplo_1.yaml", texto: ejemploDatos, sucio: false },
   ]);
   const [idActivo, setIdActivo] = useState("doc-1");
-  const [svg, setSvg] = useState<string | null>(null);
-  const [errores, setErrores] = useState<string[]>([]);
-  const [milis, setMilis] = useState(0);
   const [exportando, setExportando] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [zoom, setZoom] = useState(1);
@@ -199,7 +196,6 @@ function App() {
   const [propsTarea, setPropsTarea] = useState<{ x: number; y: number; codigo: string } | null>(null);
   const inputFecha = useRef<HTMLInputElement | null>(null);
 
-  const mainTyp = useMemo(() => generarMainTyp(parametros), [parametros]);
   const nivelActual = String(parametros["mostrar-niveles"] ?? "auto");
 
   const docActual = useMemo(
@@ -207,6 +203,58 @@ function App() {
     [docs, idActivo],
   );
   const texto = docActual.texto;
+
+  // Configuración viva del panel: los cambios de parámetros se reflejan al
+  // instante en el render nativo; el motor Rust solo recalcula las fechas
+  // (filasPanel) cuando cambia el YAML o el estado del CPM.
+  const parametrosRef = useRef(parametros);
+  parametrosRef.current = parametros;
+  const cpmActivado = parametros.cpm === true || parametros.cpm === "true";
+
+  const filasFirma = `${String(parametros["inicio-proyecto"] ?? "")}|${String(parametros["termino-proyecto"] ?? "")}`;
+
+  // Fechas resueltas por el motor (petgraph en Rust, la misma fuente que la
+  // carta): alimenta la vista nativa, el "término" calculado de cada tarea y
+  // los límites de la ventana temporal. Con datos inválidos queda en null
+  // (panel en blanco; los diagnósticos muestran el motivo).
+  const [filasPanel, setFilasPanel] = useState<Fila[] | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    const id = window.setTimeout(async () => {
+      try {
+        const fechaOpt = (k: string) => {
+          const v = parametrosRef.current[k];
+          return typeof v === "string" && v.trim() !== "" ? v : undefined;
+        };
+        const filas = await invoke<Fila[]>("preparar_filas", {
+          texto: textoRef.current,
+          cpm: cpmActivado || necesitaCpm(textoRef.current),
+          inicioProyecto: fechaOpt("inicio-proyecto"),
+          terminoProyecto: fechaOpt("termino-proyecto"),
+        });
+        if (vivo) setFilasPanel(filas);
+      } catch {
+        if (vivo) setFilasPanel(null);
+      }
+    }, 250);
+    return () => {
+      vivo = false;
+      window.clearTimeout(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [texto, cpmActivado, filasFirma]);
+
+  // Vista nativa: el layout (layout-gantt.ts) se calcula en TypeScript y se
+  // emite como SVG. Typst ya no compila en pantalla: sigue siendo el motor de
+  // la exportación PDF (mismo contrato de `config:`, misma apariencia).
+  const vista = useMemo<VistaGantt | null>(() => {
+    const filas = filasPanel;
+    if (!filas || filas.length === 0) return null;
+    return dibujarGantt(filas, parametros);
+  }, [filasPanel, parametros]);
+  const svg = vista?.svg ?? null;
+  const geometria = vista?.geometria ?? null;
+  const milis = vista?.milis ?? 0;
 
   // el nombre del archivo abierto se muestra en el título de la ventana
   useEffect(() => {
@@ -220,57 +268,6 @@ function App() {
   textoRef.current = texto;
   const idActivoRef = useRef(idActivo);
   idActivoRef.current = idActivo;
-  const mainTypRef = useRef(mainTyp);
-  mainTypRef.current = mainTyp;
-  const peticionRef = useRef(0);
-  const enVueloRef = useRef(false);
-  const pendienteRef = useRef(false);
-  const volverACompilar = useCallback(async () => {
-    const peticion = peticionRef.current;
-    const textoActual = textoRef.current;
-    const mainActual = mainTypRef.current;
-    // CPM activo (parámetro de la UI o config del YAML): precalcula las
-    // fechas con petgraph (preparar_filas) e inyecta `fechas-cpm` para que
-    // la librería no recalcule el CPM interno (cpm.typ). Si falla (datos
-    // inválidos) se compila con el YAML crudo y Typst reporta el error.
-    let textoParaTypst = textoActual;
-    const cpmActivo =
-      parametrosRef.current["cpm"] === true || necesitaCpm(textoActual);
-    if (cpmActivo) {
-      const fechaOpt = (k: string) => {
-        const v = parametrosRef.current[k];
-        return typeof v === "string" && v.trim() !== "" ? v : undefined;
-      };
-      try {
-        const filas = await invoke<Fila[]>("preparar_filas", {
-          texto: textoActual,
-          cpm: true,
-          inicioProyecto: fechaOpt("inicio-proyecto"),
-          terminoProyecto: fechaOpt("termino-proyecto"),
-        });
-        textoParaTypst = inyectarFechasCpm(textoActual, filas);
-      } catch {
-        // sin inyección: la carta se compila igual (error visible en pantalla)
-      }
-    }
-    const r = await compilarSvg(textoParaTypst, mainActual).catch((e) => ({
-      svg: null,
-      errores: [String(e)],
-      milis: 0,
-    }));
-    enVueloRef.current = false;
-    // descartar el resultado si llegó una edición más nueva mientras tanto
-    if (peticionRef.current === peticion && textoRef.current === textoActual) {
-      setSvg(r.svg);
-      setErrores(r.errores);
-      setMilis(r.milis);
-    }
-    // fusionar: si hubo cambios durante la compilación, se repite una vez más
-    if (pendienteRef.current) {
-      pendienteRef.current = false;
-      void volverACompilar();
-    }
-  }, []);
 
   const alCambiarTexto = useCallback((t: string) => {
     const id = idActivoRef.current;
@@ -315,19 +312,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Compila la carta en un Web Worker (hilo aparte). Las ediciones que
-  // llegan durante una compilación se fusionan en una sola repetición final:
-  // nunca hay una cola de resultados obsoletos aplicándose en orden.
-  useEffect(() => {
-    peticionRef.current++;
-    if (!enVueloRef.current) {
-      enVueloRef.current = true;
-      void volverACompilar();
-    } else {
-      pendienteRef.current = true;
-    }
-  }, [texto, mainTyp, volverACompilar]);
-
   useEffect(() => {
     const caja = svgCaja.current;
     if (!caja) return;
@@ -349,7 +333,6 @@ function App() {
   const tareasTodas = useMemo(() => listarTareas(texto), [texto]);
   const tareasTodasRef = useRef(tareasTodas);
   tareasTodasRef.current = tareasTodas;
-  const geometria = useMemo(() => (svg ? analizarSvg(svg) : null), [svg]);
 
   const saltarATarea = useCallback(
     (indice: number) => {
@@ -502,8 +485,6 @@ function App() {
   );
 
   const cerrarMenu = useCallback(() => setMenuAbierto(false), []);
-  const parametrosRef = useRef(parametros);
-  parametrosRef.current = parametros;
   const cambiarParametro = useCallback(
     (clave: string, valor: Valor) => {
       const proximos = { ...parametrosRef.current, [clave]: valor };
@@ -541,8 +522,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configJson]);
 
-  const cpmActivado = parametros.cpm === true || parametros.cpm === "true";
-
   // Validación estructural en vivo (mismas reglas que la librería)
   const diagnosticos = useMemo(() => validarTexto(texto, cpmActivado), [texto, cpmActivado]);
   const erroresValidacion = diagnosticos.filter((x) => x.severidad === "error");
@@ -561,37 +540,6 @@ function App() {
     setMensaje(`Id duplicado: renombré '${repetido.id}' → '${nuevo}'`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diagnosticos]);
-
-  // Fechas resueltas por el motor (petgraph en Rust, la misma fuente que la
-  // carta): alimenta el "término" calculado de cada actividad y los límites
-  // de la ventana temporal. Con datos inválidos queda en null (panel en
-  // blanco, como con el port TS).
-  const [filasPanel, setFilasPanel] = useState<Fila[] | null>(null);
-  useEffect(() => {
-    let vivo = true;
-    const id = window.setTimeout(async () => {
-      try {
-        const fechaOpt = (k: string) => {
-          const v = parametrosRef.current[k];
-          return typeof v === "string" && v.trim() !== "" ? v : undefined;
-        };
-        const filas = await invoke<Fila[]>("preparar_filas", {
-          texto: textoRef.current,
-          cpm: cpmActivado || necesitaCpm(textoRef.current),
-          inicioProyecto: fechaOpt("inicio-proyecto"),
-          terminoProyecto: fechaOpt("termino-proyecto"),
-        });
-        if (vivo) setFilasPanel(filas);
-      } catch {
-        if (vivo) setFilasPanel(null);
-      }
-    }, 250);
-    return () => {
-      vivo = false;
-      window.clearTimeout(id);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [texto, cpmActivado]);
 
   const terminoCalculado = useMemo(() => {
     const m = new Map<string, string>();
@@ -1358,7 +1306,7 @@ function App() {
     }
   };
 
-  const nProblemas = errores.length + erroresValidacion.length;
+  const nProblemas = erroresValidacion.length;
 
   const estados: "ok" | "error" | "compilando" =
     nProblemas
@@ -1551,8 +1499,8 @@ function App() {
             </>
           ) : (
             <div className="aviso">
-              {errores.length ? (
-                <pre className="errores">{errores.join("\n")}</pre>
+              {erroresValidacion.length ? (
+                <pre className="errores">{erroresValidacion.map((d) => d.mensaje).join("\n")}</pre>
               ) : (
                 "Compilando…"
               )}

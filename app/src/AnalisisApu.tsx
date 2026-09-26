@@ -14,6 +14,7 @@ export interface ApuRecurso {
   cantidad: number;
   precio: number;
   rendimiento: number;
+  desperdicio: number;
   cuota: number;
 }
 
@@ -91,6 +92,7 @@ export default function AnalisisApu({ codigo, texto, onInsertarPu, onCerrar }: P
                     <th className="num">Cantidad</th>
                     <th className="num">Precio</th>
                     <th className="num">Rendimiento</th>
+                    <th className="num">Desperdicio</th>
                     <th className="num">Cuota</th>
                   </tr>
                 </thead>
@@ -103,18 +105,19 @@ export default function AnalisisApu({ codigo, texto, onInsertarPu, onCerrar }: P
                       <td className="num">{fmt(r.cantidad)}</td>
                       <td className="num">{fmt(r.precio)}</td>
                       <td className="num">{fmt(r.rendimiento)}</td>
+                      <td className="num">{r.desperdicio ? `${fmt(r.desperdicio * 100)}%` : "—"}</td>
                       <td className="num">{fmt(r.cuota)}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={6}>Precio unitario (PU)</td>
+                    <td colSpan={7}>Precio unitario (PU)</td>
                     <td className="num">{fmt(apu.costoUnitario)}</td>
                   </tr>
                   {apu.cantidad != null && (
                     <tr>
-                      <td colSpan={6}>
+                      <td colSpan={7}>
                         Costo = {fmt(apu.cantidad)}{apu.unidad ? ` ${apu.unidad}` : ""} × PU
                       </td>
                       <td className="num">{apu.costo != null ? fmt(apu.costo) : "—"}</td>

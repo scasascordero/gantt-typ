@@ -82,7 +82,7 @@ async fn preparar_filas(
 }
 
 #[tauri::command]
-fn analizar_apu(texto: String, codigo: String) -> Option<dominio::apu::ApuAnalisis> {
+fn analizar_apu(texto: String, codigo: String) -> Result<Option<dominio::apu::ApuAnalisis>, String> {
     dominio::apu::analizar(&texto, &codigo)
 }
 

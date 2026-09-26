@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use super::apu::{catalogo_de, precio_unitario_con};
+use super::apu::{catalogo_de, precio_unitario_con, precio_unitario_de_catalogo};
 use serde_yaml::Mapping;
 use super::cpm::calcular_cpm;
 use super::fechas::a_dias;
@@ -47,7 +47,7 @@ fn resolver_hoja(
     ctx: &Ctx,
     codigo: &str,
     fechas_de: Option<&HashMap<String, (i64, i64)>>,
-) -> Resuelto {
+) -> Result<Resuelto, String> {
     let item = ctx.indice.mapa.get(codigo).expect("mapa");
     let dur: i64;
     let inicio_dias: i64;
@@ -74,12 +74,23 @@ fn resolver_hoja(
 
     let av = interpretar_avance(campo(&item.map, "avance").unwrap_or(&serde_yaml::Value::Null));
     let cantidad = a_numero_formula_o(campo(&item.map, "cantidad"));
-    // costo-unitario explícito manda; si no, sale del APU (recursos x
-    // rendimiento), mismo cálculo que precio-unitario-de-recursos (datos.typ).
-    let cu = a_numero_o(campo(&item.map, "costo-unitario")).or_else(|| {
+    // costo-unitario explícito manda; si no, sale del APU inline (`recursos`,
+    // con Actividades Auxiliares del catálogo resueltas recursivamente) o,
+    // en su defecto, del vínculo `apu: <llave>` a una Partida reutilizable
+    // del catálogo. Mismo cálculo que precio-unitario-de-recursos (datos.typ).
+    let cu_recursos = {
         let v = campo(&item.map, "recursos").unwrap_or(&serde_yaml::Value::Null);
-        precio_unitario_con(v, ctx.catalogo.as_ref())
-    });
+        precio_unitario_con(v, ctx.catalogo.as_ref())?
+    };
+    let cu_apu = match (campo(&item.map, "apu"), ctx.catalogo.as_ref()) {
+        (Some(serde_yaml::Value::String(clave)), Some(cat)) => {
+            precio_unitario_de_catalogo(clave, cat)?
+        }
+        _ => None,
+    };
+    let cu = a_numero_o(campo(&item.map, "costo-unitario"))
+        .or(cu_recursos)
+        .or(cu_apu);
     let costo_expl = a_numero_o(campo(&item.map, "costo"));
     let costo = costo_expl
         .or_else(|| match (cantidad, cu) {
@@ -87,7 +98,7 @@ fn resolver_hoja(
             _ => None,
         });
 
-    Resuelto {
+    Ok(Resuelto {
         inicio_dias,
         termino_dias,
         duracion: dur,
@@ -99,7 +110,7 @@ fn resolver_hoja(
         },
         costo_unitario: cu,
         costo,
-    }
+    })
 }
 
 fn resolver_fechas_hoja(item: &ItemCrudo) -> (i64, i64, i64) {
@@ -137,11 +148,12 @@ fn resolver_grupo(
     ctx: &Ctx,
     codigo: &str,
     fechas_de: Option<&HashMap<String, (i64, i64)>>,
-) -> Resuelto {
+) -> Result<Resuelto, String> {
     let item = ctx.indice.mapa.get(codigo).unwrap();
-    let sub: Vec<Resuelto> = ctx.indice.hijos_de.get(codigo).map(|hijos| {
-        hijos.iter().map(|h| resolver_en_grupo(ctx, h, fechas_de)).collect()
-    }).unwrap_or_default();
+    let sub: Vec<Resuelto> = match ctx.indice.hijos_de.get(codigo) {
+        Some(hijos) => hijos.iter().map(|h| resolver_en_grupo(ctx, h, fechas_de)).collect::<Result<Vec<_>, _>>()?,
+        None => Vec::new(),
+    };
 
     let inicio_raw = campo(&item.map, "inicio");
     let termino_raw = campo(&item.map, "termino");
@@ -187,7 +199,7 @@ fn resolver_grupo(
         }
     };
 
-    Resuelto {
+    Ok(Resuelto {
         inicio_dias,
         termino_dias,
         duracion,
@@ -199,14 +211,14 @@ fn resolver_grupo(
         },
         costo_unitario: a_numero_o(campo(&item.map, "costo-unitario")),
         costo,
-    }
+    })
 }
 
 fn resolver_en_grupo(
     ctx: &Ctx,
     codigo: &str,
     fechas_de: Option<&HashMap<String, (i64, i64)>>,
-) -> Resuelto {
+) -> Result<Resuelto, String> {
     if ctx.es_hoja[&codigo.to_string()] {
         resolver_hoja(ctx, codigo, fechas_de)
     } else {
@@ -441,7 +453,7 @@ pub fn preparar_proyecto(texto: &str, opts: &OpcionesCpm) -> Result<Vec<Fila>, S
     let mut filas: Vec<Fila> = Vec::new();
     for (codigo, nivel) in &ctx.orden {
         let item = ctx.indice.mapa.get(codigo).unwrap();
-        let r = resolver_en_grupo(&ctx, codigo, fechas_de.as_ref());
+        let r = resolver_en_grupo(&ctx, codigo, fechas_de.as_ref())?;
         let es_grupo_fila = ctx.indice.hijos_de.get(codigo).map_or(false, |h| !h.is_empty());
         let hito = campo(&item.map, "hito") == Some(&serde_yaml::Value::Bool(true))
             || (r.duracion <= 1

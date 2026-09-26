@@ -20,6 +20,8 @@ type Params = Record<string, Valor>;
 
 export interface VistaGantt {
   svg: string;
+  /** Solo con `soloLineaTiempo`: SVG de la cabecera del calendario (queda fija al hacer scroll); `svg` lleva el resto en las mismas coordenadas. */
+  svgCabecera?: string;
   geometria: Geometria;
   milis: number;
 }
@@ -253,7 +255,9 @@ export function dibujarGantt(
   const fuente = String(p["fuente"] ?? "Liberation Sans");
   const tamanoFuente = pt(aNumero(p["tamano-fuente"], 8));
   const altoFilaPx = cm(aNumero(p["alto-fila"], 0.6));
-  const indentPorNivel = cm(aNumero(p["indent-por-nivel"], 0.4));
+  // En pantalla la sangría es la mitad: el nivel se distingue igual y ahorra
+  // espacio a la izquierda (la impresión usa el valor completo).
+  const indentPorNivel = cm(aNumero(p["indent-por-nivel"], 0.4)) * (solo ? 0.5 : 1);
   const colorGrupo = cor(String(p["color-grupo"] ?? "475569"));
   const colorTarea = cor(String(p["color-tarea"] ?? "2563eb"));
   const colorAvance = cor(String(p["color-avance"] ?? "6b7280"));
@@ -587,6 +591,8 @@ export function dibujarGantt(
     }
   }
 
+  const nCabecera = out.length;
+
   // --- Rejilla vertical (solo el nivel más fino visible) --------------------
   {
     const finY = y0 + altoFilas;
@@ -749,8 +755,17 @@ export function dibujarGantt(
   }
 
   // --- Título y ensamblado ---------------------------------------------------
+  // Con `solo`, la cabecera del calendario va en su propio SVG (fija al hacer
+  // scroll) y el cuerpo conserva las mismas coordenadas, con esa franja vacía.
   const cuerpo =
-    `<g transform="translate(0 ${fmt(yDesp)})">` + out.join("") + `</g>`;
+    `<g transform="translate(0 ${fmt(yDesp)})">` + (solo ? out.slice(nCabecera) : out).join("") + `</g>`;
+  const svgCabecera = solo
+    ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${fmt(anchoTotal)} ${fmt(altoEncabezado)}" width="${fmt(anchoTotal)}" height="${fmt(altoEncabezado)}" font-family="${esc(fuente)}">` +
+      out.slice(0, nCabecera).join("") +
+      linea(xIni, 0, anchoTotal, 0, colorRejilla, trazoVertical) +
+      linea(0, altoEncabezado, anchoTotal, altoEncabezado, colorRejilla, trazoVertical) +
+      `</svg>`
+    : undefined;
   const tituloHtml =
     titulo === null || solo
       ? ""
@@ -782,5 +797,5 @@ export function dibujarGantt(
     celdas,
   };
 
-  return { svg, geometria, milis: performance.now() - t0 };
+  return { svg, svgCabecera, geometria, milis: performance.now() - t0 };
 }

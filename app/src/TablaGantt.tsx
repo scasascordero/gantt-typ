@@ -82,7 +82,7 @@ export function TablaGantt(props: Props) {
     <div className="tabla-html" style={{ width: anchoTabla, height: g.alto }}>
       <div
         className="tabla-html-cabecera"
-        style={{ top: 0, height: g.altoEncabezado }}
+        style={{ height: g.altoEncabezado }}
         onContextMenu={alMenuCabecera}
       >
         {cabeceras.map((cd) => (
@@ -125,7 +125,7 @@ export function TablaGantt(props: Props) {
               height: banda.y1 - banda.y0,
               justifyContent: esNombre ? "flex-start" : esColumnaDerecha(c.campo) ? "flex-end" : "center",
               textAlign: esNombre ? "left" : esColumnaDerecha(c.campo) ? "right" : "center",
-              ...(esNombre ? { paddingLeft: fila.nivel * (g.sangria ?? 14) + 6 } : {}),
+              ...(esNombre ? { paddingLeft: fila.nivel * (g.sangria ?? 8) + 4 } : {}),
             }}
             title={c.editable ? "Doble clic para editar" : "Doble clic: propiedades"}
             onClick={(e) => alClic(fila.codigo, e)}

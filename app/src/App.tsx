@@ -310,7 +310,7 @@ function App() {
       setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z * (e.deltaY < 0 ? 1.12 : 1 / 1.12))));
     };
     caja.addEventListener("wheel", alRueda, { passive: false });
-    const medir = () => setAnchoCarta(Math.max(0, caja.clientWidth - 10));
+    const medir = () => setAnchoCarta(Math.max(0, caja.clientWidth - 2));
     medir();
     const ro = new ResizeObserver(medir);
     ro.observe(caja);
@@ -366,7 +366,7 @@ function App() {
       const caja = svgCaja.current;
       const g = geometria;
       if (!caja || !g || !g.bandas.length) return -1;
-      const s = caja.querySelector("svg");
+      const s = caja.querySelector(".carta-cuerpo-svg svg");
       if (!s || !g.ancho) return -1;
       const rect = s.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return -1;
@@ -426,7 +426,7 @@ function App() {
       const caja = svgCaja.current;
       const g = geometria;
       if (!caja || !g || !g.bandas.length) return;
-      const s = caja.querySelector("svg");
+      const s = caja.querySelector(".carta-cuerpo-svg svg");
       if (!s || !g.ancho) return;
       const rect = s.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
@@ -468,7 +468,7 @@ function App() {
       const g = geometria;
       const caja = svgCaja.current;
       if (!g || !g.bandas.length || !caja) return;
-      const s = caja.querySelector("svg");
+      const s = caja.querySelector(".carta-cuerpo-svg svg");
       if (!s) return;
       const rect = s.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
@@ -574,7 +574,7 @@ function App() {
     const caja = svgCaja.current;
     const g = geometria;
     if (!caja || !g || !g.ancho) return null;
-    const s = caja.querySelector("svg");
+    const s = caja.querySelector(".carta-cuerpo-svg svg");
     if (!s) return null;
     const rect = s.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return null;
@@ -1557,7 +1557,26 @@ function App() {
                   onPointerUp={terminarArrastre}
                   onPointerCancel={terminarArrastre}
                 >
-                  <div dangerouslySetInnerHTML={{ __html: svg }} />
+                  {vista?.svgCabecera && (
+                    <div
+                      className="carta-cabecera"
+                      style={{ height: geometria.altoEncabezado }}
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setMenuCalendario({ x: e.clientX, y: e.clientY });
+                      }}
+                      dangerouslySetInnerHTML={{ __html: vista.svgCabecera }}
+                    />
+                  )}
+                  <div
+                    className="carta-cuerpo-svg"
+                    style={{ marginTop: vista?.svgCabecera ? -geometria.altoEncabezado : 0 }}
+                    dangerouslySetInnerHTML={{ __html: svg }}
+                  />
                   {rectSel && (
                     <div
                       className="seleccion-carta"

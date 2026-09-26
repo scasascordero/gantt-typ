@@ -6,8 +6,17 @@
 # Los campos `cantidad` y `rendimiento` aceptan fórmulas aritméticas
 # (p. ej. "0.04*2", "160*2", "6/3"): se evalúan antes de calcular las cuotas.
 config:
-  titulo: "Centro de distribución — con análisis de precios unitarios (APU)"
-  mostrar-columnas: [duracion, costo-unitario, costo]
+  titulo: Centro de distribución — con análisis de precios unitarios (APU)
+  ventana-fin: 2026-12-31
+  nivel-anio: "true"
+  mostrar-columnas:
+    - duracion
+    - inicio
+    - termino
+    - unidad
+    - cantidad
+    - costo-unitario
+    - costo
 tareas:
   # El proyecto completo (primera tarea) no lleva número WBS; sus subtareas
   # son el primer nivel.
@@ -53,8 +62,9 @@ tareas:
                 duracion: 25
                 avance: 0.7
               - codigo: "1.3.4"
+                termino: 2026-04-11
                 nombre: Revisión y consolidado
-                inicio: 2026-04-01
+                inicio: 2026-04-02
                 duracion: 10
                 avance: 0.2
 
@@ -62,9 +72,10 @@ tareas:
         nombre: Permisos y compras
         subtareas:
           - codigo: "2.1"
+            termino: 2026-04-24
             nombre: Permiso de edificación
-            inicio: 2026-03-15
-            duracion: 45
+            inicio: 2026-03-14
+            duracion: 42
             avance: 0.6
           - codigo: "2.2"
             nombre: Licitación del contratista

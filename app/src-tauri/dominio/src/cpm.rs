@@ -7,8 +7,13 @@ struct NodoGrafo {
     codigo: String,
 }
 
+// Una dependencia puede apuntar a una hoja o a un grupo (tarea resumen). `grupos`
+// da, por id de grupo, las hojas que contiene: un grupo empieza cuando empieza su
+// primera hoja (mínimo de sus ES) y termina cuando termina la última (máximo de
+// sus EF), como en MS Project.
 pub fn calcular_cpm(
     hojas: &[HojaCpm],
+    grupos: &HashMap<String, Vec<String>>,
     inicio_proyecto: Option<i64>,
     termino_proyecto: Option<i64>,
 ) -> Result<HashMap<String, ResCpm>, String> {
@@ -25,21 +30,40 @@ pub fn calcular_cpm(
         idx_map.insert(h.codigo.clone(), idx);
     }
 
-    // 2. Agregar aristas (predecesora -> succede)
+    // Hojas que cubre una dependencia: la propia hoja o las de un grupo.
+    let cubiertas = |pred: &str| -> Vec<String> {
+        if idx_map.contains_key(pred) {
+            vec![pred.to_string()]
+        } else {
+            grupos.get(pred).cloned().unwrap_or_default()
+        }
+    };
+    // ¿la dependencia `pred` alcanza a la hoja `c`?
+    let cubre = |pred: &str, c: &str| -> bool {
+        pred == c || grupos.get(pred).map_or(false, |v| v.iter().any(|x| x == c))
+    };
+
+    // 2. Agregar aristas (predecesora -> succede); una dependencia sobre un grupo
+    // pone una arista desde cada una de sus hojas.
+    let mut grado: HashMap<String, i64> = HashMap::new();
+    for h in hojas {
+        grado.insert(h.codigo.clone(), 0);
+    }
     for h in hojas {
         let succ = *idx_map.get(&h.codigo).unwrap();
         for d in &h.predecesoras {
-            if let Some(&pred) = idx_map.get(&d.pred) {
-                g.add_edge(pred, succ, d.clone());
+            for hoja_pred in cubiertas(&d.pred) {
+                // una tarea no depende de su propio grupo
+                if hoja_pred == h.codigo {
+                    continue;
+                }
+                g.add_edge(idx_map[&hoja_pred], succ, d.clone());
+                *grado.get_mut(&h.codigo).unwrap() += 1;
             }
         }
     }
 
     // 3. Topological sort (Kahn)
-    let mut grado: HashMap<String, i64> = HashMap::new();
-    for h in hojas {
-        grado.insert(h.codigo.clone(), h.predecesoras.len() as i64);
-    }
     let mut cola: Vec<String> = hojas.iter()
         .filter(|h| grado[&h.codigo] == 0)
         .map(|h| h.codigo.clone())
@@ -106,8 +130,13 @@ pub fn calcular_cpm(
         if let Some(&ef) = ef_ancla_de.get(c) { cands.push(ef - dur + 1); }
 
         for d in deps_de.get(c).unwrap_or(&vec![]) {
-            let pred_es = *es_de.get(&d.pred).unwrap();
-            let pred_ef = *ef_de.get(&d.pred).unwrap();
+            // inicio/término de la predecesora: de la hoja o agregados de su grupo
+            let hechas: Vec<String> = cubiertas(&d.pred).into_iter().filter(|x| es_de.contains_key(x)).collect();
+            if hechas.is_empty() {
+                continue;
+            }
+            let pred_es = hechas.iter().map(|x| es_de[x]).min().unwrap();
+            let pred_ef = hechas.iter().map(|x| ef_de[x]).max().unwrap();
             let cota = match d.tipo {
                 TipoDep::Fs => pred_ef + 1 + d.lag,
                 TipoDep::Ss => pred_es + d.lag,
@@ -145,16 +174,18 @@ pub fn calcular_cpm(
             let ls = *ls_de.get(succ_code).unwrap();
             let lf = *lf_de.get(succ_code).unwrap();
             let succ_ef = *ef_de.get(succ_code).unwrap();
-            // Encontrar la dependencia correspondiente
-            let d = deps_de.get(succ_code).unwrap().iter()
-                .find(|d| d.pred == *c)
-                .unwrap();
-            match d.tipo {
-                TipoDep::Fs => ls - 1 - d.lag,
-                TipoDep::Ss => ls + dur - 1 - d.lag,
-                TipoDep::Ff => lf - d.lag,
-                TipoDep::Sf => succ_ef - d.lag,
-            }
+            // Cota de cada dependencia de `succ` que alcanza a esta hoja (directa o
+            // vía un grupo que la contiene); se toma la más restrictiva.
+            deps_de.get(succ_code).unwrap().iter()
+                .filter(|d| cubre(&d.pred, c))
+                .map(|d| match d.tipo {
+                    TipoDep::Fs => ls - 1 - d.lag,
+                    TipoDep::Ss => ls + dur - 1 - d.lag,
+                    TipoDep::Ff => lf - d.lag,
+                    TipoDep::Sf => succ_ef - d.lag,
+                })
+                .min()
+                .unwrap_or(i64::MAX)
         }).collect();
 
         let lf = if !cotas.is_empty() {

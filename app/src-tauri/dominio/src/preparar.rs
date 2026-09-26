@@ -285,6 +285,39 @@ pub fn preparar_proyecto(texto: &str, opts: &OpcionesCpm) -> Result<Vec<Fila>, S
     let indice = construir_indice(&plano);
     let referencias = referencias_de(&plano);
 
+    // Un grupo no puede depender de una de sus propias subtareas (hoja o subgrupo).
+    fn ids_descendientes(indice: &Indice, codigo: &str, out: &mut std::collections::HashSet<String>) {
+        if let Some(hijos) = indice.hijos_de.get(codigo) {
+            for h in hijos {
+                if let Some(it) = indice.mapa.get(h) {
+                    out.insert(it.id.clone());
+                }
+                ids_descendientes(indice, h, out);
+            }
+        }
+    }
+    for it in &plano {
+        if es_hoja_de(&indice, &it.codigo) {
+            continue;
+        }
+        let deps = resolver_deps(
+            interpretar_predecesoras(campo(&it.map, "predecesoras").unwrap_or(&serde_yaml::Value::Null)),
+            &referencias,
+        );
+        if deps.is_empty() {
+            continue;
+        }
+        let mut desc = std::collections::HashSet::new();
+        ids_descendientes(&indice, &it.codigo, &mut desc);
+        if let Some(d) = deps.iter().find(|d| desc.contains(&d.pred)) {
+            let cod = plano.iter().find(|x| x.id == d.pred).map(|x| x.codigo.clone()).unwrap_or_else(|| d.pred.clone());
+            return Err(format!(
+                "'{}' es un grupo y no puede depender de su propia subtarea '{}'",
+                it.codigo, cod
+            ));
+        }
+    }
+
     // Orden DFS (padre antes que hijos), con nivel
     let mut orden: Vec<(String, i32)> = Vec::new();
     fn visitar_dfs(indice: &Indice, codigo: &str, nivel: i32, out: &mut Vec<(String, i32)>) {
@@ -352,19 +385,44 @@ pub fn preparar_proyecto(texto: &str, opts: &OpcionesCpm) -> Result<Vec<Fila>, S
     let mut res_cpm: HashMap<String, ResCpm> = HashMap::new();
 
     if opts.cpm {
-        // Validar que las dependencias apunten a hojas existentes
+        // Hojas que contiene cada grupo (por id): una dependencia puede apuntar a un
+        // grupo y equivale a depender de todas sus hojas (inicio = primera, término = última).
+        fn hojas_de(indice: &Indice, codigo: &str, out: &mut Vec<String>) {
+            match indice.hijos_de.get(codigo) {
+                Some(hijos) if !hijos.is_empty() => {
+                    for h in hijos {
+                        hojas_de(indice, h, out);
+                    }
+                }
+                _ => {
+                    if let Some(it) = indice.mapa.get(codigo) {
+                        out.push(it.id.clone());
+                    }
+                }
+            }
+        }
+        let mut grupos: HashMap<String, Vec<String>> = HashMap::new();
+        for it in &plano {
+            if !es_hoja_de(&indice, &it.codigo) {
+                let mut v = Vec::new();
+                hojas_de(&indice, &it.codigo, &mut v);
+                grupos.insert(it.id.clone(), v);
+            }
+        }
+
+        // Validar que las dependencias apunten a tareas existentes (hoja o grupo)
         for h in &hojas {
             for d in &h.predecesoras {
-                if !hojas.iter().any(|hh| hh.codigo == d.pred) {
+                if !hojas.iter().any(|hh| hh.codigo == d.pred) && !grupos.contains_key(&d.pred) {
                     return Err(format!(
-                        "CPM: '{}' depende de '{}', que no existe o es un grupo",
+                        "CPM: '{}' depende de '{}', que no existe",
                         h.codigo, d.pred
                     ));
                 }
             }
         }
 
-        let r = calcular_cpm(&hojas, dia_proyecto, dia_proyecto_term)?;
+        let r = calcular_cpm(&hojas, &grupos, dia_proyecto, dia_proyecto_term)?;
 
         let mut fechas = HashMap::new();
         for h in &hojas {

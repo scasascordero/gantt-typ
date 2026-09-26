@@ -281,3 +281,160 @@ tareas:
     let filas2 = preparar_proyecto(yaml_sin_id, &OpcionesCpm { cpm: false, inicio_proyecto: None, termino_proyecto: None }).expect("preparar");
     assert_eq!(filas2[0].id, "7");
 }
+// --- Dependencias sobre un grupo (tarea resumen) ---------------------------
+// Un grupo empieza con su primera hoja y termina con la última.
+const YAML_DEP_GRUPO: &str = r#"
+tareas:
+  - codigo: "1"
+    nombre: Grupo
+    subtareas:
+      - codigo: "1.1"
+        nombre: A
+        inicio: "2026-01-05"
+        duracion: 3
+      - codigo: "1.2"
+        nombre: B
+        inicio: "2026-01-08"
+        duracion: 4
+  - codigo: "2"
+    nombre: Despues del grupo (FS)
+    duracion: 2
+    predecesoras: ["1"]
+  - codigo: "3"
+    nombre: Con el grupo (SS+1)
+    duracion: 2
+    predecesoras: ["1:ss:1"]
+  - codigo: "4"
+    nombre: Termina con el grupo (FF)
+    duracion: 3
+    predecesoras: ["1:ff:0"]
+"#;
+
+#[test]
+fn cpm_dependencia_sobre_un_grupo() {
+    let filas = preparar_proyecto(YAML_DEP_GRUPO, &OpcionesCpm {
+        cpm: true,
+        inicio_proyecto: None,
+        termino_proyecto: None,
+    }).expect("una tarea puede depender de un grupo");
+    let f = |c: &str| filas.iter().find(|x| x.codigo == c).unwrap();
+    let d = |dia: i64| dias_desde_epoca(2026, 1, dia);
+
+    // FS: empieza el día siguiente al término del grupo (el de su última hoja, 11)
+    assert_eq!(f("2").inicio_dias, d(12));
+    assert_eq!(f("2").termino_dias, d(13));
+    // SS+1: un día después del inicio del grupo (el de su primera hoja, 5)
+    assert_eq!(f("3").inicio_dias, d(6));
+    assert_eq!(f("3").termino_dias, d(7));
+    // FF: termina cuando termina el grupo (11)
+    assert_eq!(f("4").termino_dias, d(11));
+    assert_eq!(f("4").inicio_dias, d(9));
+    // el grupo abarca de la primera a la última hoja
+    assert_eq!(f("1").inicio_dias, d(5));
+    assert_eq!(f("1").termino_dias, d(11));
+
+    // ruta crítica: B (la última hoja del grupo) y su sucesora FS; A tiene holgura
+    assert_eq!(f("1.2").critico, Some(true));
+    assert_eq!(f("2").critico, Some(true));
+    assert_eq!(f("1.1").critico, Some(false));
+    assert!(f("1.1").holgura.unwrap() > 0);
+}
+
+#[test]
+fn cpm_hoja_no_depende_de_su_propio_grupo() {
+    // depender del grupo al que se pertenece no crea un ciclo (se ignora)
+    let yaml = r#"
+tareas:
+  - codigo: "1"
+    nombre: Grupo
+    subtareas:
+      - codigo: "1.1"
+        nombre: A
+        inicio: "2026-01-05"
+        duracion: 3
+        predecesoras: ["1"]
+"#;
+    let filas = preparar_proyecto(yaml, &OpcionesCpm { cpm: true, inicio_proyecto: None, termino_proyecto: None })
+        .expect("no debe fallar ni ciclar");
+    assert_eq!(filas.iter().find(|x| x.codigo == "1.1").unwrap().inicio_dias, dias_desde_epoca(2026, 1, 5));
+}
+
+#[test]
+fn cpm_dependencia_inexistente_sigue_fallando() {
+    let yaml = r#"
+tareas:
+  - codigo: "1"
+    nombre: A
+    inicio: "2026-01-05"
+    duracion: 3
+    predecesoras: ["9"]
+"#;
+    let r = preparar_proyecto(yaml, &OpcionesCpm { cpm: true, inicio_proyecto: None, termino_proyecto: None });
+    assert!(r.is_err());
+}
+
+// --- Un grupo no puede depender de una de sus propias subtareas ------------
+fn prepara(yaml: &str, cpm: bool) -> Result<Vec<dominio::modelo::Fila>, String> {
+    preparar_proyecto(yaml, &OpcionesCpm { cpm, inicio_proyecto: None, termino_proyecto: None })
+}
+
+#[test]
+fn grupo_no_puede_depender_de_su_propia_hoja() {
+    let yaml = r#"
+tareas:
+  - codigo: "1"
+    nombre: Grupo
+    predecesoras: ["1.1"]
+    subtareas:
+      - codigo: "1.1"
+        nombre: A
+        inicio: "2026-01-05"
+        duracion: 3
+"#;
+    for cpm in [false, true] {
+        let e = prepara(yaml, cpm).expect_err("debe rechazarse");
+        assert!(e.contains("'1'") && e.contains("'1.1'") && e.contains("no puede depender"), "{e}");
+    }
+}
+
+#[test]
+fn grupo_no_puede_depender_de_un_subgrupo_suyo_ni_por_id() {
+    let yaml = r#"
+tareas:
+  - codigo: "1"
+    nombre: Grupo
+    predecesoras: ["x1"]
+    subtareas:
+      - codigo: "1.1"
+        nombre: Subgrupo
+        subtareas:
+          - codigo: "1.1.1"
+            id: x1
+            nombre: Hoja
+            inicio: "2026-01-05"
+            duracion: 3
+"#;
+    let e = prepara(yaml, true).expect_err("depende de una descendiente por id");
+    assert!(e.contains("no puede depender"), "{e}");
+}
+
+#[test]
+fn grupo_si_puede_depender_de_una_tarea_externa() {
+    let yaml = r#"
+tareas:
+  - codigo: "0"
+    nombre: Antes
+    inicio: "2026-01-01"
+    duracion: 2
+  - codigo: "1"
+    nombre: Grupo
+    predecesoras: ["0"]
+    subtareas:
+      - codigo: "1.1"
+        nombre: A
+        inicio: "2026-01-05"
+        duracion: 3
+"#;
+    prepara(yaml, false).expect("depender de una tarea externa es válido");
+    prepara(yaml, true).expect("también con CPM");
+}

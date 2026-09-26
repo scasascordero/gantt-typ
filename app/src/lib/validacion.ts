@@ -121,12 +121,13 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
     esHoja: boolean;
     tieneInicio: boolean;
     pred: string[];
+    padre: string | null;
   }
   const items: Item[] = [];
   const codigosVistos = new Map<string, number>();
   const idsVistos = new Map<string, string>(); // id -> codigo
 
-  const caminar = (seq: unknown, _nivel: number, enRaiz: boolean): void => {
+  const caminar = (seq: unknown, _nivel: number, enRaiz: boolean, padre: string | null): void => {
     if (!isSeq(seq)) return;
     let primeraRaiz = enRaiz;
     for (const nodo of seq.items) {
@@ -249,11 +250,23 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
         esHoja,
         tieneInicio: typeof inicio === "string" && RE_FECHA.test(inicio.trim()),
         pred: tokensDePredecesoras(datos.predecesoras),
+        padre,
       });
-      caminar(sub, _nivel + 1, false);
+      caminar(sub, _nivel + 1, false, clave);
     }
   };
-  caminar(raiz, 0, true);
+  caminar(raiz, 0, true, null);
+
+  // ¿`codigo` está dentro de `ancestro` (a cualquier profundidad)?
+  const padreDe = new Map(items.map((it) => [it.codigo, it.padre] as const));
+  const estaDentroDe = (codigo: string, ancestro: string): boolean => {
+    let p = padreDe.get(codigo) ?? null;
+    while (p !== null) {
+      if (p === ancestro) return true;
+      p = padreDe.get(p) ?? null;
+    }
+    return false;
+  };
 
   // reglas por tarea (mismas restricciones de resolver-fechas-hoja / cpm)
   for (const t of items) {
@@ -292,6 +305,16 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
           mensaje: `La predecesora '${base}' de '${t.codigo}' no existe`,
           severidad: "error",
         });
+      } else if (!t.esHoja) {
+        // un grupo no puede depender de una de sus propias subtareas
+        const codigoPred = codigosVistos.has(base) ? base : (idsVistos.get(base) ?? base);
+        if (estaDentroDe(codigoPred, t.codigo)) {
+          d.push({
+            linea: t.linea,
+            mensaje: `El grupo '${t.codigo}' no puede depender de su propia subtarea '${codigoPred}'`,
+            severidad: "error",
+          });
+        }
       }
     }
   }

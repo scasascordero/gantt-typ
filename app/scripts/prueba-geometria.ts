@@ -239,6 +239,28 @@ probarFixture(
   }),
 );
 
+// ---- Modo solo línea de tiempo (paneles separados + zoom por geometría) ----
+console.log("\n== solo linea de tiempo (zoom x2) ==");
+{
+  const base = params({ "mostrar-niveles": "auto" });
+  const vistaBase = dibujarGantt(fixtureSimple(), base);
+  const vistaSolo = dibujarGantt(fixtureSimple(), base, undefined, { soloLineaTiempo: true, zoom: 2 });
+  const gb = vistaBase.geometria;
+  const gs = vistaSolo.geometria;
+
+  const lineaTiempoBase = gb.ancho - (gb.tablaX ?? 0);
+  pasa("solo: tablaX en 0", gs.tablaX === 0);
+  pasa("solo: la tabla HTML conserva sus celdas y ancho", (gs.celdas ?? []).length === (gb.celdas ?? []).length && gs.anchoTabla === gb.anchoTabla);
+  pasa("solo: ancho == linea-tiempo * zoom", Math.abs(gs.ancho - lineaTiempoBase * 2) < 0.01, `ancho=${gs.ancho.toFixed(2)} esperado=${(lineaTiempoBase * 2).toFixed(2)}`);
+  pasa("solo: calendario arranca en x=0", (gs.calendario?.x0 ?? -1) === 0);
+  pasa("solo: mismas filas dibujadas", gs.bandas.length === gb.bandas.length && gs.bandas[0].codigo === gb.bandas[0].codigo);
+  pasa("solo: hay barras", gs.barras.length > 0);
+  const fuera = (gs.barras ?? []).some((b) => b.x < 0 || b.x + b.w > gs.ancho);
+  pasa("solo: barras dentro del area", !fuera);
+  const gText = gs.bandas[0].y0 - gs.altoEncabezado;
+  pasa("solo: sin titulo (yDesp 0)", gText >= 0 && gText < 0.01);
+}
+
 const RUTA = process.argv[2];
 if (RUTA) {
   console.log(`\nCasos probados. Ruta opcional: ${RUTA}`);

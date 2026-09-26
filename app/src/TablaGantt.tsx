@@ -1,10 +1,9 @@
-// TablaGantt.tsx — Tabla HTML real para el área izquierda de la carta (nombre
-// + columnas de datos), superpuesta sobre el SVG en el MISMO espacio (interior
-// de svg-hoja, que ya está escalado por el zoom). Cada celda se posiciona con
-// porcentajes derivados de `geometria.celdas`/`bandas` (una fila = una banda),
-// así que las filas queden exactamente alineadas con las barras del SVG a
-// cualquier zoom. La edición es un <input> de verdad dentro de la celda: nada
-// de coordenadas absolutas ni de desfases por scroll.
+// TablaGantt.tsx — Panel izquierdo de la carta: tabla HTML real (nombre +
+// columnas de datos) junto al SVG, que lleva solo calendario y barras. Ambos
+// están a escala 1:1 en píxeles y comparten altura de encabezado y de fila
+// (salen de `geometria`), por lo que quedan alineados y el scroll vertical del
+// contenedor común los mueve juntos; la tabla es `sticky` a la izquierda. La
+// edición es un <input> de verdad dentro de la celda.
 
 import { useCallback } from "react";
 import type { Geometria } from "./lib/geometria";
@@ -36,9 +35,7 @@ export function TablaGantt(props: Props) {
   const { geometria: g, filasPorCodigo, mostrarCodigo, seleccion, editando } = props;
   const { onSeleccionar, onEditar, onPropiedades, onCancelarEdicion, onCommitEdicion, onMenuCelda, onMenuCabecera } = props;
 
-  const tx = g.tablaX ?? 0;
-  const px = (x: number) => (tx > 0 ? (x / tx) * 100 : 0);
-  const py = (y: number) => (g.alto > 0 ? (y / g.alto) * 100 : 0);
+  const anchoTabla = g.anchoTabla ?? 0;
 
   const alClic = useCallback(
     (codigo: string, e: React.MouseEvent) => {
@@ -74,18 +71,18 @@ export function TablaGantt(props: Props) {
   );
 
   const bandas = g.bandas;
-  if (bandas.length === 0 || tx <= 0) return null;
-  const topEncabezado = (bandas[0]?.y0 ?? g.altoEncabezado) - g.altoEncabezado;
+  if (bandas.length === 0 || anchoTabla <= 0) return null;
 
   const celdas = g.celdas ?? [];
   const cabeceras = celdas.filter((c) => c.indice === 0 && c.campo !== "nombre");
-  const celdasCuerpo = celdas.filter((c) => c.indice > 0 || c.campo === "nombre");
+  // La fila 0 (el proyecto) también es cuerpo: solo presta sus x0/x1 a la cabecera.
+  const celdasCuerpo = celdas;
 
   return (
-    <div className="tabla-html">
+    <div className="tabla-html" style={{ width: anchoTabla, height: g.alto }}>
       <div
         className="tabla-html-cabecera"
-        style={{ top: `${py(topEncabezado)}%`, height: `${py(g.altoEncabezado)}%` }}
+        style={{ top: 0, height: g.altoEncabezado }}
         onContextMenu={alMenuCabecera}
       >
         {cabeceras.map((cd) => (
@@ -93,8 +90,8 @@ export function TablaGantt(props: Props) {
             key={cd.campo}
             className={`tabla-html-cab${esColumnaDerecha(cd.campo) ? " tabla-html-der" : ""}`}
             style={{
-              left: `${px(cd.x0)}%`,
-              width: `${px(cd.x1 - cd.x0)}%`,
+              left: cd.x0,
+              width: cd.x1 - cd.x0,
             }}
           >
             {ETIQUETAS[cd.campo] ?? cd.campo}
@@ -113,6 +110,7 @@ export function TablaGantt(props: Props) {
           : valorColumna(fila, c.campo);
         const cls = [
           "tabla-html-celda",
+          esNombre ? " tabla-html-celda-nombre" : "",
           esNombre ? (fila.nivel === 0 || fila.negrita ? " tabla-html-celda-grupo" : "") : "",
           seleccion && seleccion.codigo === fila.codigo ? " tabla-html-celda-sel" : "",
         ].join("").trim();
@@ -121,12 +119,13 @@ export function TablaGantt(props: Props) {
             key={`${c.indice}:${c.campo}`}
             className={cls}
             style={{
-              left: `${px(c.x0)}%`,
-              width: `${px(c.x1 - c.x0)}%`,
-              top: `${py(banda.y0)}%`,
-              height: `${py(banda.y1 - banda.y0)}%`,
+              left: c.x0,
+              width: c.x1 - c.x0,
+              top: banda.y0,
+              height: banda.y1 - banda.y0,
               justifyContent: esNombre ? "flex-start" : esColumnaDerecha(c.campo) ? "flex-end" : "center",
-              ...(esNombre ? { paddingLeft: `${fila.nivel * 14 + 8}px` } : {}),
+              textAlign: esNombre ? "left" : esColumnaDerecha(c.campo) ? "right" : "center",
+              ...(esNombre ? { paddingLeft: fila.nivel * (g.sangria ?? 14) + 6 } : {}),
             }}
             title={c.editable ? "Doble clic para editar" : "Doble clic: propiedades"}
             onClick={(e) => alClic(fila.codigo, e)}

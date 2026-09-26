@@ -387,6 +387,7 @@ body,
 }
 
 .panel-preview {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -395,7 +396,11 @@ body,
   background: #e2e8f0;
 }
 
-.svg-contenedor {
+/* Carta: un solo contenedor con scroll (vertical y horizontal). Dentro, la
+   tabla HTML (sticky a la izquierda) y el SVG de calendario + barras van en
+   fila, a escala 1:1, así el scroll vertical los mueve juntos. */
+.carta-scroll {
+  min-width: 0;
   position: relative;
   flex: 1;
   min-height: 0;
@@ -403,20 +408,25 @@ body,
   box-shadow: 0 1px 3px rgb(15 23 42 / 0.1);
   border-radius: 4px;
   padding: 4px;
-  cursor: pointer;
   overflow: auto;
   overscroll-behavior: contain;
+}
+
+.carta-fila {
+  display: flex;
+  align-items: flex-start;
+  width: max-content;
+}
+
+.carta-svg {
+  position: relative;
+  flex: none;
+  cursor: pointer;
   touch-action: none;
 }
 
-.svg-contenedor .svg-hoja {
-  position: relative;
-}
-
-.svg-contenedor .svg-hoja svg {
+.carta-svg svg {
   display: block;
-  width: 100%;
-  height: auto;
 }
 
 /* Resaltado de la fila seleccionada (overlay sobre el SVG escalado). */
@@ -429,21 +439,16 @@ body,
   border-radius: 3px;
 }
 
-/* Tabla HTML que replica el área izquierda del SVG (nombre + columnas) en el
-   MISMO espacio con el zoom ya aplicado: se posiciona con porcentajes sacados
-   de `geometria` (celdas/bandas), así las filas quedan alineadas con las
-   barras siempre. La edición es un <input> real dentro de la celda; el área
-   sin celdas deja pasar los eventos al contenedor (selección, menús).
-   El resaltado de fila (rectSel, z 1) queda debajo del z 2 de la tabla. */
+/* Tabla HTML (nombre + columnas de datos): panel izquierdo de la carta. Las
+   celdas se posicionan en px con las coordenadas de `geometria`, las mismas
+   filas que dibuja el SVG de la derecha. */
 .tabla-html {
-  position: absolute;
+  position: sticky;
   left: 0;
-  top: 0;
-  z-index: 2;
-  pointer-events: none;
-}
-.tabla-html * {
-  pointer-events: auto;
+  z-index: 3;
+  flex: none;
+  background: #ffffff;
+  border-right: 1px solid #cbd5e1;
 }
 .tabla-html-cabecera {
   position: absolute;
@@ -497,6 +502,8 @@ body,
 }
 .tabla-html-celda-sel {
   background: #eff6ff;
+}
+.tabla-html-celda-sel.tabla-html-celda-nombre {
   box-shadow: inset 3px 0 0 #2563eb;
 }
 .tabla-html-input {

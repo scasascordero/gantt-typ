@@ -24,8 +24,12 @@ export interface Geometria {
   bandas: Banda[];
   barras: Rect[];
   hoy?: number;
-  /** X final de la tabla de tareas (arranque de la línea de tiempo). */
+  /** X (en el SVG) donde arranca la línea de tiempo: 0 cuando el SVG lleva solo calendario y barras. */
   tablaX?: number;
+  /** Ancho de la tabla de tareas (nombre + columnas) en px, sea HTML aparte o dibujada en el SVG. */
+  anchoTabla?: number;
+  /** Sangría por nivel del nombre (px). */
+  sangria?: number;
   /** Altura del encabezado (años/meses/semanas/días) en unidades del SVG. */
   altoEncabezado: number;
   /** Ventana temporal de la carta: días julianos visibles (para mapear px↔día). */

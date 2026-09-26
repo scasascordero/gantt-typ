@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import ejemploDatos from "../../ejemplos/ejemplo_1.yaml?raw";
@@ -133,9 +133,10 @@ function fijarTituloVentana(titulo: string) {
   }
 }
 
-const ZOOM_MIN = 1; // "Ajustar" (100%) es el piso: el dibujo nunca queda más
-                    // chico que el ancho de su panel
-const ZOOM_MAX = 8;
+// Zoom tipo navegador: escala tabla y SVG juntos (CSS `zoom` sobre la carta);
+// el calendario no cambia, solo el tamaño de todo.
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 4;
 
 interface Doc {
   id: string;
@@ -199,7 +200,6 @@ function App() {
   } | null>(null);
   const [mapaSel, setMapaSel] = useState<ColumnasExcel | null>(null);
   const [seleccion, setSeleccion] = useState<{ codigo: string } | null>(null);
-  const [rectSel, setRectSel] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [editandoCelda, setEditandoCelda] = useState<CeldaEdicion | null>(null);
   // Popup de propiedades: se abre solo con doble clic sobre la actividad (el
   // clic simple sólo resalta la fila). Independiente de `seleccion` para poder
@@ -261,11 +261,17 @@ function App() {
   // Vista nativa: el layout (layout-gantt.ts) se calcula en TypeScript y se
   // emite como SVG. Typst ya no compila en pantalla: sigue siendo el motor de
   // la exportación PDF (mismo contrato de `config:`, misma apariencia).
+  // En pantalla el SVG lleva solo calendario y barras (1:1 en px); la tabla es
+  // HTML aparte. El zoom no entra aquí: se aplica como CSS a toda la carta.
+  const [anchoCarta, setAnchoCarta] = useState(0);
   const vista = useMemo<VistaGantt | null>(() => {
-const filas = filasPanel;
+    const filas = filasPanel;
     if (!filas) return null;
-    return dibujarGantt(filas, parametros, seleccion?.codigo ?? undefined);
-  }, [filasPanel, parametros, seleccion]);
+    return dibujarGantt(filas, parametros, seleccion?.codigo ?? undefined, {
+      soloLineaTiempo: true,
+      anchoDisponible: anchoCarta > 0 ? anchoCarta : undefined,
+    });
+  }, [filasPanel, parametros, seleccion, anchoCarta]);
   const svg = vista?.svg ?? null;
   const geometria = vista?.geometria ?? null;
   const milis = vista?.milis ?? 0;
@@ -276,6 +282,7 @@ const filas = filasPanel;
   }, [docActual.nombre, docActual.sucio]);
 
   const svgCaja = useRef<HTMLDivElement | null>(null);
+  const cartaScroll = useRef<HTMLDivElement | null>(null);
   const textoRef = useRef(texto);
   textoRef.current = texto;
   const idActivoRef = useRef(idActivo);
@@ -295,7 +302,7 @@ const filas = filasPanel;
   }, [cargarProyectos]);
 
   useEffect(() => {
-    const caja = svgCaja.current;
+    const caja = cartaScroll.current;
     if (!caja) return;
     const alRueda = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
@@ -303,52 +310,23 @@ const filas = filasPanel;
       setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z * (e.deltaY < 0 ? 1.12 : 1 / 1.12))));
     };
     caja.addEventListener("wheel", alRueda, { passive: false });
-    return () => caja.removeEventListener("wheel", alRueda);
-  }, [svg]);
-
-  // Resaltado de la fila seleccionada: el overlay va dentro de svg-hoja, cuyas
-  // dimensiones en píxeles coinciden con el SVG ya escalado por el zoom, así
-  // que basta con mapear las coordenadas del viewBox a ese espacio.
-  useLayoutEffect(() => {
-    const calcular = () => {
-      const s = seleccion;
-      const g = geometria;
-      const caja = svgCaja.current;
-      if (!s || !g || !g.bandas.length || !caja) {
-        setRectSel(null);
-        return;
-      }
-      const b = g.bandas.find((x) => x.codigo === s.codigo);
-      if (!b) {
-        setRectSel(null);
-        return;
-      }
-      const svgEl = caja.querySelector("svg");
-      if (!svgEl) {
-        setRectSel(null);
-        return;
-      }
-      const r = svgEl.getBoundingClientRect();
-      if (r.width <= 0 || r.height <= 0) {
-        setRectSel(null);
-        return;
-      }
-      const fEscX = r.width / g.ancho;
-      const fEscY = r.height / g.alto;
-      setRectSel({
-        top: b.y0 * fEscY,
-        left: 0,
-        width: g.ancho * fEscX,
-        height: (b.y1 - b.y0) * fEscY,
-      });
-    };
-    const t = window.setTimeout(calcular, 0);
-    window.addEventListener("resize", calcular);
+    const medir = () => setAnchoCarta(Math.max(0, caja.clientWidth - 10));
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(caja);
     return () => {
-      window.clearTimeout(t);
-      window.removeEventListener("resize", calcular);
+      caja.removeEventListener("wheel", alRueda);
+      ro.disconnect();
     };
-  }, [seleccion, geometria, zoom, svg]);
+  }, [svg !== null]);
+
+  // Resaltado de la fila seleccionada sobre el SVG (1:1 en px: las bandas de
+  // la geometría ya están en el espacio del SVG).
+  const rectSel = useMemo(() => {
+    const b = seleccion && geometria?.bandas.find((x) => x.codigo === seleccion.codigo);
+    if (!b || !geometria) return null;
+    return { top: b.y0, left: 0, width: geometria.ancho, height: b.y1 - b.y0 };
+  }, [seleccion, geometria]);
 
   const tareas = useMemo(() => {
     const todas = listarTareas(texto);
@@ -606,7 +584,7 @@ const filas = filasPanel;
   const diaEnPx = useCallback(
     (px: number): number => {
       const g = geometria;
-      if (!g?.tablaX || !g?.dias || g.ancho <= g.tablaX) return g?.dias?.inicio ?? 0;
+      if (g?.tablaX === undefined || !g.dias || g.ancho <= g.tablaX) return g?.dias?.inicio ?? 0;
       const paso = (g.dias.fin - g.dias.inicio + 1) / (g.ancho - g.tablaX);
       return g.dias.inicio + (px - g.tablaX) * paso;
     },
@@ -617,7 +595,7 @@ const filas = filasPanel;
     (e: React.PointerEvent) => {
       const g = geometria;
       const esc = escalaSvg();
-      if (!g || !esc || !g.tablaX || !g.dias) return;
+      if (!g || !esc || g.tablaX === undefined || !g.dias) return;
       const px = (e.clientX - esc.rect.left) * esc.fx;
       const py = (e.clientY - esc.rect.top) * esc.fy;
       const tol = 6 * esc.fx;
@@ -653,7 +631,7 @@ const filas = filasPanel;
       const g = geometria;
       const esc = escalaSvg();
       const caja = svgCaja.current;
-      if (!g || !esc || !caja || !g.tablaX || !g.dias) return;
+      if (!g || !esc || !caja || g.tablaX === undefined || !g.dias) return;
       const px = (e.clientX - esc.rect.left) * esc.fx;
       const py = (e.clientY - esc.rect.top) * esc.fy;
 
@@ -1420,7 +1398,7 @@ const filas = filasPanel;
         ? "ok"
         : "compilando";
 
-  const columnas = "1fr";
+  const columnas = "minmax(0, 1fr)";
 
   return (
     <div className="app">
@@ -1549,47 +1527,50 @@ const filas = filasPanel;
         <section className="panel-preview">
           {svg && geometria ? (
             <div
-              ref={svgCaja}
-              className="svg-contenedor"
-              onClick={alClicSvg}
-              onDoubleClick={alDobleClicCarta}
-              onContextMenu={alClicDerechoCarta}
-              onPointerDown={iniciarArrastre}
-              onPointerMove={moverArrastre}
-              onPointerUp={terminarArrastre}
-              onPointerCancel={terminarArrastre}
+              ref={cartaScroll}
+              className="carta-scroll"
               title="Clic: selecciona fila · doble clic en celda: editar · doble clic en la actividad: propiedades · arrastra barras para mover/estirar · clic derecho: menú · Ctrl+rueda: zoom"
             >
-              <div className="svg-hoja" style={{ width: `${zoom * 100}%` }}>
-                <div dangerouslySetInnerHTML={{ __html: svg }} />
-                {geometria && (
-                  <TablaGantt
-                    geometria={geometria}
-                    filasPorCodigo={filasPorCodigo}
-                    mostrarCodigo={mostrarCodigo}
-                    seleccion={seleccion}
-                    editando={editandoCelda}
-                    onSeleccionar={seleccionarFila}
-                    onEditar={abrirEdicionCelda}
-                    onPropiedades={abrirPropiedades}
-                    onCancelarEdicion={cerrarEdicionCelda}
-                    onCommitEdicion={commitEdicionCelda}
-                    onMenuCelda={menutareaDesdeTabla}
-                    onMenuCabecera={menucolumnasDesdeTabla}
-                  />
-                )}
-              </div>
-              {rectSel && (
-                <div
-                  className="seleccion-carta"
-                  style={{
-                    top: rectSel.top,
-                    left: rectSel.left,
-                    width: rectSel.width,
-                    height: rectSel.height,
-                  }}
+              <div className="carta-fila" style={{ zoom }}>
+                <TablaGantt
+                  geometria={geometria}
+                  filasPorCodigo={filasPorCodigo}
+                  mostrarCodigo={mostrarCodigo}
+                  seleccion={seleccion}
+                  editando={editandoCelda}
+                  onSeleccionar={seleccionarFila}
+                  onEditar={abrirEdicionCelda}
+                  onPropiedades={abrirPropiedades}
+                  onCancelarEdicion={cerrarEdicionCelda}
+                  onCommitEdicion={commitEdicionCelda}
+                  onMenuCelda={menutareaDesdeTabla}
+                  onMenuCabecera={menucolumnasDesdeTabla}
                 />
-              )}
+                <div
+                  ref={svgCaja}
+                  className="carta-svg"
+                  onClick={alClicSvg}
+                  onDoubleClick={alDobleClicCarta}
+                  onContextMenu={alClicDerechoCarta}
+                  onPointerDown={iniciarArrastre}
+                  onPointerMove={moverArrastre}
+                  onPointerUp={terminarArrastre}
+                  onPointerCancel={terminarArrastre}
+                >
+                  <div dangerouslySetInnerHTML={{ __html: svg }} />
+                  {rectSel && (
+                    <div
+                      className="seleccion-carta"
+                      style={{
+                        top: rectSel.top,
+                        left: rectSel.left,
+                        width: rectSel.width,
+                        height: rectSel.height,
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="aviso">

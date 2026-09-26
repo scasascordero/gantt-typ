@@ -143,7 +143,7 @@ function diasEnRango(diaMin: number, diaMax: number): { inicio: number; fin: num
 
 function formatearFecha(z: number): string {
   const f = fechaDesdeDias(z);
-  return `${f.dia}-${f.mes}-${f.anio}`;
+  return `${String(f.dia).padStart(2, "0")}-${String(f.mes).padStart(2, "0")}-${f.anio}`;
 }
 
 function formatearImporte(v: number): string {
@@ -191,8 +191,10 @@ export const COL_CAMPO: Record<string, string> = {
   "costo-unitario": "costo-unitario",
 };
 
+// Números y fechas van alineados a la derecha; solo el texto (unidad, marca
+// de crítico) queda centrado.
 export function esColumnaDerecha(col: string): boolean {
-  return col === "cantidad" || col === "costo-unitario" || col === "costo";
+  return col !== "unidad" && col !== "critico";
 }
 
 export function valorColumna(f: Fila, col: string): string {
@@ -232,8 +234,21 @@ export function valorColumna(f: Fila, col: string): string {
 
 // --- El render principal ----------------------------------------------------
 
-export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): VistaGantt {
+export function dibujarGantt(
+  filas: Fila[],
+  p: Params,
+  resaltar?: string,
+  opts?: {
+    /** Pantalla: el SVG lleva solo calendario + barras; la tabla (nombre y columnas) es HTML aparte. */
+    soloLineaTiempo?: boolean;
+    /** Ancho (px) disponible para tabla + línea de tiempo; con `soloLineaTiempo` la línea de tiempo llena el resto. */
+    anchoDisponible?: number;
+    /** Factor de zoom horizontal de la línea de tiempo (solo con `soloLineaTiempo`). */
+    zoom?: number;
+  },
+): VistaGantt {
   const t0 = performance.now();
+  const solo = opts?.soloLineaTiempo === true;
 
   const fuente = String(p["fuente"] ?? "Liberation Sans");
   const tamanoFuente = pt(aNumero(p["tamano-fuente"], 8));
@@ -330,10 +345,12 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
   if (anchoNombreParam !== "auto") {
     anchoNombreFinal = cm(aNumero(anchoNombreParam, 8));
   } else {
-    const maxAncho = visibles.reduce(
-      (acc, f) => Math.max(acc, regular(f.nombre) + f.nivel * indentPorNivel),
-      0,
-    );
+    const negrita = (s: string) => medir(s, tamanoFuente, "bold", "normal", fuente);
+    const maxAncho = visibles.reduce((acc, f) => {
+      const etiqueta = (mostrarCodigo && f.codigo !== "" ? f.codigo + ". " : "") + f.nombre;
+      const ancho = f.nivel === 0 || f.negrita ? negrita(etiqueta) : regular(etiqueta);
+      return Math.max(acc, ancho + f.nivel * indentPorNivel);
+    }, 0);
     anchoNombreFinal = maxAncho + cm(0.9);
   }
 
@@ -357,10 +374,13 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
 
   const anchoLineaTiempoParam = p["ancho-linea-tiempo"];
   const anchoLineaTiempo =
-    anchoLineaTiempoParam === "auto" || anchoLineaTiempoParam == null
-      ? cm(20)
-      : cm(aNumero(anchoLineaTiempoParam, 20));
-  const anchoTotal = anchoTabla + anchoLineaTiempo;
+    solo && opts?.anchoDisponible !== undefined
+      ? Math.max(cm(6), opts.anchoDisponible - anchoTabla) * (opts.zoom ?? 1)
+      : (anchoLineaTiempoParam === "auto" || anchoLineaTiempoParam == null
+          ? cm(20)
+          : cm(aNumero(anchoLineaTiempoParam, 20))) * (solo ? (opts?.zoom ?? 1) : 1);
+  const xIni = solo ? 0 : anchoTabla;
+  const anchoTotal = xIni + anchoLineaTiempo;
 
   const anchoPorDia = anchoLineaTiempo / totalDias;
 
@@ -372,14 +392,15 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
   const altoFilas = visibles.length * altoFilaPx;
   const y0 = altoEncabezado;
 
-  // Caja del título (como gantt.typ: sobre el dibujo, ancho completo).
+  // Caja del título (como gantt.typ: sobre el dibujo, ancho completo). En modo
+  // solo línea de tiempo no se dibuja (queda para la vista de impresión).
   const tituloSize = tamanoFuente + pt(5);
-  const altoTitulo = titulo ? tituloSize * 1.25 : 0;
-  const huecoTitulo = titulo ? cm(0.35) : 0;
+  const altoTitulo = titulo && !solo ? tituloSize * 1.25 : 0;
+  const huecoTitulo = titulo && !solo ? cm(0.35) : 0;
   const yDesp = altoTitulo + huecoTitulo;
   const altoTotal = yDesp + altoEncabezado + altoFilas;
 
-  const xDe = (dia: number): number => anchoTabla + ((dia - diaMin) / totalDias) * anchoLineaTiempo;
+  const xDe = (dia: number): number => xIni + ((dia - diaMin) / totalDias) * anchoLineaTiempo;
 
   const trazoVertical = pt(0.4);
   const separadorHorizontal = pt(0.3);
@@ -542,7 +563,7 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
   // Banda de días (fondo único + líneas finas + números si caben).
   if (mostrarDia) {
     const yTop = altoBandaAnio + altoBandaMes + altoBandaSemana;
-    out.push(rect(anchoTabla, yTop, anchoTotal, yTop + altoBandaDia, colorCalendario, colorRejilla, pt(0.4)));
+    out.push(rect(xIni, yTop, anchoTotal, yTop + altoBandaDia, colorCalendario, colorRejilla, pt(0.4)));
     for (const d of dias) {
       out.push(linea(xDe(d.inicio), yTop, xDe(d.inicio), yTop + altoBandaDia, colorRejilla, trazoVertical));
       if (anchoPorDia >= cm(0.35)) {
@@ -551,16 +572,18 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
     }
   }
 
-  // --- Encabezados de las columnas de datos ---------------------------------
-  for (let i = 0; i < mostrarColumnas.length; i++) {
-    const col = mostrarColumnas[i];
-    const cx1 = colXInicios[i];
-    const cx2 = cx1 + anchosColumnas[i];
-    out.push(rect(cx1, 0, cx2, altoEncabezado, null, colorRejilla, pt(0.4)));
-    if (esColumnaDerecha(col)) {
-      out.push(texto(cx2 - cm(0.12), altoEncabezado / 2, ETIQUETAS[col] ?? col, { peso: "bold", halign: "fin" }));
-    } else {
-      out.push(texto((cx1 + cx2) / 2, altoEncabezado / 2, ETIQUETAS[col] ?? col, { peso: "bold" }));
+  // --- Encabezados de las columnas de datos (solo con tabla) ----------------
+  if (!solo) {
+    for (let i = 0; i < mostrarColumnas.length; i++) {
+      const col = mostrarColumnas[i];
+      const cx1 = colXInicios[i];
+      const cx2 = cx1 + anchosColumnas[i];
+      out.push(rect(cx1, 0, cx2, altoEncabezado, null, colorRejilla, pt(0.4)));
+      if (esColumnaDerecha(col)) {
+        out.push(texto(cx2 - cm(0.12), altoEncabezado / 2, ETIQUETAS[col] ?? col, { peso: "bold", halign: "fin" }));
+      } else {
+        out.push(texto((cx1 + cx2) / 2, altoEncabezado / 2, ETIQUETAS[col] ?? col, { peso: "bold" }));
+      }
     }
   }
 
@@ -612,25 +635,27 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
     const rellenoTxt = f.colorTexto ? cor(String(f.colorTexto)) : colorTexto;
 
     const xNombre = f.nivel * indentPorNivel + cm(0.15);
-    const prefijo = mostrarCodigo && f.codigo !== "" ? f.codigo + ". " : "";
-    out.push(texto(xNombre, yCentro, prefijo + f.nombre, { peso, estilo, relleno: rellenoTxt, halign: "inicio" }));
+    if (!solo) {
+      const prefijo = mostrarCodigo && f.codigo !== "" ? f.codigo + ". " : "";
+      out.push(texto(xNombre, yCentro, prefijo + f.nombre, { peso, estilo, relleno: rellenoTxt, halign: "inicio" }));
 
-    for (let j = 0; j < mostrarColumnas.length; j++) {
-      const col = mostrarColumnas[j];
-      const cx1 = colXInicios[j];
-      const cx2 = cx1 + anchosColumnas[j];
-      const valor = valorColumna(f, col);
-      if (esColumnaDerecha(col)) {
-        out.push(texto(cx2 - cm(0.12), yCentro, valor, { peso, estilo, relleno: rellenoTxt, halign: "fin" }));
-      } else {
-        out.push(texto((cx1 + cx2) / 2, yCentro, valor, { peso, estilo, relleno: rellenoTxt }));
+      for (let j = 0; j < mostrarColumnas.length; j++) {
+        const col = mostrarColumnas[j];
+        const cx1 = colXInicios[j];
+        const cx2 = cx1 + anchosColumnas[j];
+        const valor = valorColumna(f, col);
+        if (esColumnaDerecha(col)) {
+          out.push(texto(cx2 - cm(0.12), yCentro, valor, { peso, estilo, relleno: rellenoTxt, halign: "fin" }));
+        } else {
+          out.push(texto((cx1 + cx2) / 2, yCentro, valor, { peso, estilo, relleno: rellenoTxt }));
+        }
       }
     }
 
     const x1Real = xDe(f.inicioDias);
     const x2Real = xDe(f.terminoDias + 1);
-    const fueraDeVentana = x2Real <= anchoTabla || x1Real >= anchoTotal;
-    const x1 = Math.max(x1Real, anchoTabla);
+    const fueraDeVentana = x2Real <= xIni || x1Real >= anchoTotal;
+    const x1 = Math.max(x1Real, xIni);
     const x2 = Math.min(x2Real, anchoTotal);
     const dibujarBarra = !f.esGrupo || mostrarBarraGrupo;
     const avanceSerie = mostrarSerieAvance ? (f.avanceSerie ?? null) : null;
@@ -677,7 +702,7 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
         const oy = yCentroDe(pred);
         const sx = xDe(g.inicioDias);
         const sy = yCentroDe(g);
-        if (ox < anchoTabla || ox > anchoTotal || sx < anchoTabla || sx > anchoTotal) continue;
+        if (ox < xIni || ox > anchoTotal || sx < xIni || sx > anchoTotal) continue;
         const mx = (ox + sx) / 2;
         const c = resaltada ? colorTarea : colorDependencia;
         const w = resaltada ? pt(1) : pt(0.5);
@@ -696,15 +721,17 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
   }
 
   // --- Separadores y marco ---------------------------------------------------
-  out.push(linea(anchoNombreFinal, 0, anchoNombreFinal, y0 + altoFilas, colorRejilla, trazoVertical));
-  for (const x of colXInicios.slice(1)) {
-    out.push(linea(x, 0, x, y0 + altoFilas, colorRejilla, trazoVertical));
+  if (!solo) {
+    out.push(linea(anchoNombreFinal, 0, anchoNombreFinal, y0 + altoFilas, colorRejilla, trazoVertical));
+    for (const x of colXInicios.slice(1)) {
+      out.push(linea(x, 0, x, y0 + altoFilas, colorRejilla, trazoVertical));
+    }
+    if (mostrarColumnas.length > 0) {
+      out.push(linea(anchoTabla, 0, anchoTabla, y0 + altoFilas, colorRejilla, trazoVertical));
+    }
   }
-  if (mostrarColumnas.length > 0) {
-    out.push(linea(anchoTabla, 0, anchoTabla, y0 + altoFilas, colorRejilla, trazoVertical));
-  }
-  out.push(linea(anchoNombreFinal, 0, anchoTotal, 0, colorRejilla, trazoVertical));
-  out.push(linea(0, y0, anchoNombreFinal, y0, colorRejilla, trazoVertical));
+  out.push(linea(xIni, 0, anchoTotal, 0, colorRejilla, trazoVertical));
+  out.push(linea(0, y0, solo ? anchoTotal : anchoNombreFinal, y0, colorRejilla, trazoVertical));
   out.push(linea(0, y0, 0, y0 + altoFilas, colorRejilla, trazoVertical));
   out.push(linea(anchoTotal, 0, anchoTotal, y0 + altoFilas, colorRejilla, trazoVertical));
   out.push(linea(0, y0 + altoFilas, anchoTotal, y0 + altoFilas, colorRejilla, trazoVertical));
@@ -725,7 +752,7 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
   const cuerpo =
     `<g transform="translate(0 ${fmt(yDesp)})">` + out.join("") + `</g>`;
   const tituloHtml =
-    titulo === null
+    titulo === null || solo
       ? ""
       : `<text x="${fmt(anchoTotal / 2)}" y="${fmt(altoTitulo / 2)}" font-size="${fmt(tituloSize)}" font-weight="bold" font-family="${esc(fuente)}" fill="${colorTexto}" text-anchor="middle" dominant-baseline="central">${esc(titulo)}</text>`;
   const defsHtml = defs.length ? `<defs>${defs.join("")}</defs>` : "";
@@ -742,11 +769,16 @@ export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): Vista
     bandas,
     barras,
     hoy: geometriaHoy,
-    tablaX: anchoTabla,
+    tablaX: xIni,
+    anchoTabla,
+    sangria: indentPorNivel,
     altoEncabezado,
     dias: { inicio: diaMin, fin: diaMax },
-    calendario: { x0: anchoTabla, y0: yDesp, y1: yDesp + altoEncabezado },
-    columnas: mostrarColumnas.length > 0 ? { x0: anchoNombreFinal, x1: anchoTabla, y0: yDesp, y1: yDesp + altoEncabezado } : undefined,
+    calendario: { x0: xIni, y0: yDesp, y1: yDesp + altoEncabezado },
+    columnas:
+      mostrarColumnas.length > 0
+        ? { x0: anchoNombreFinal, x1: anchoTabla, y0: yDesp, y1: yDesp + altoEncabezado }
+        : undefined,
     celdas,
   };
 

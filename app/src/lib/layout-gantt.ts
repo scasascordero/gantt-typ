@@ -569,12 +569,20 @@ export function dibujarGantt(
   }
   // Banda de meses.
   if (mostrarMes) {
+    const nombresCaben = meses.every(
+      (m) => medir(NOMBRES_MES[m.mes - 1] ?? "", tamanoFuente, "bold", "normal", fuente) + pt(3) <= xDe(m.fin + 1) - xDe(m.inicio),
+    );
     for (const m of meses) {
       const x1 = xDe(m.inicio);
       const x2 = xDe(m.fin + 1);
       celdaCal(m.inicio, m.fin, altoBandaAnio, altoBandaAnio + altoBandaMes);
       out.push(rect(x1, altoBandaAnio, x2, altoBandaAnio + altoBandaMes, colorCalendario, colorRejilla, pt(0.4)));
-      out.push(texto((x1 + x2) / 2, altoBandaAnio + altoBandaMes / 2, NOMBRES_MES[m.mes - 1] ?? "", { peso: "bold" }));
+      // Si algún nombre no cabe en su celda, toda la banda usa la inicial (un
+      // criterio único, no una mezcla); si ni la inicial cabe en la celda, se omite.
+      const nombreMes = NOMBRES_MES[m.mes - 1] ?? "";
+      const cabeEn = (t: string, ancho: number) => medir(t, tamanoFuente, "bold", "normal", fuente) + pt(3) <= ancho;
+      const etiquetaMes = nombresCaben ? nombreMes : cabeEn(nombreMes.charAt(0), x2 - x1) ? nombreMes.charAt(0) : "";
+      if (etiquetaMes) out.push(texto((x1 + x2) / 2, altoBandaAnio + altoBandaMes / 2, etiquetaMes, { peso: "bold" }));
     }
   }
   // Banda de semanas.
@@ -726,38 +734,97 @@ export function dibujarGantt(
     out.push(linea(0, yFilaBottom, anchoTotal, yFilaBottom, colorRejilla, separadorHorizontal));
   });
 
-  // --- Dependencias (flechas elbow, sobre las barras) ------------------------
+  // --- Dependencias (conectores ortogonales, sobre las barras) ---------------
+  // Cada conector sale y llega por el borde que corresponde al tipo de
+  // dependencia (fs: fin→inicio, ss: inicio→inicio, ff: fin→fin, sf:
+  // inicio→fin), con un tramo recto corto antes de girar. Si no hay espacio
+  // para el giro directo rodea la barra por el margen entre filas. Esquinas
+  // redondeadas y punta rellena; la ruta crítica va en rojo y los conectores de
+  // la fila seleccionada (que entran o salen de ella) se resaltan.
   function yCentroDe(f: Fila): number {
     const i = visibles.indexOf(f);
     if (i === -1) return 0;
     return y0 + i * altoFilaPx + altoFilaPx / 2 + yDesp;
   }
 
+  const rutaRedondeada = (puntos: [number, number][], radio: number): string => {
+    // sin puntos repetidos (segmentos de largo 0)
+    const pts = puntos.filter((q, k) => k === 0 || q[0] !== puntos[k - 1][0] || q[1] !== puntos[k - 1][1]);
+    let d = `M ${fmt(pts[0][0])} ${fmt(pts[0][1])}`;
+    for (let k = 1; k < pts.length - 1; k++) {
+      const [x0, y0p] = pts[k - 1];
+      const [x1, y1] = pts[k];
+      const [x2, y2] = pts[k + 1];
+      const l1 = Math.hypot(x1 - x0, y1 - y0p);
+      const l2 = Math.hypot(x2 - x1, y2 - y1);
+      const rr = Math.min(radio, l1 / 2, l2 / 2);
+      if (rr < 0.2) {
+        d += ` L ${fmt(x1)} ${fmt(y1)}`;
+        continue;
+      }
+      const ax = x1 - ((x1 - x0) / l1) * rr;
+      const ay = y1 - ((y1 - y0p) / l1) * rr;
+      const bx = x1 + ((x2 - x1) / l2) * rr;
+      const by = y1 + ((y2 - y1) / l2) * rr;
+      d += ` L ${fmt(ax)} ${fmt(ay)} Q ${fmt(x1)} ${fmt(y1)} ${fmt(bx)} ${fmt(by)}`;
+    }
+    const ult = pts[pts.length - 1];
+    return d + ` L ${fmt(ult[0])} ${fmt(ult[1])}`;
+  };
+
   if (mostrarDependencias) {
-    const flecha = pt(2.4);
+    const rHito = altoFilaPx * 0.28;
+    const hueco = pt(4.5);
+    const radioEsquina = pt(2.5);
+    const largoPunta = pt(4);
+    const mediaPunta = pt(2.2);
+    // x del borde izquierdo ("ini") o derecho ("fin") de la barra o el rombo de la fila
+    const extremo = (f: Fila, lado: "ini" | "fin"): number =>
+      f.hito
+        ? xDe(f.inicioDias) + (lado === "fin" ? rHito : -rHito)
+        : lado === "ini"
+          ? xDe(f.inicioDias)
+          : xDe(f.terminoDias + 1);
+
     for (const g of visibles) {
-      const resaltada = resaltar !== undefined && g.codigo === resaltar;
       for (const dep of g.predecesoras) {
         const pred = filasPorId.get(dep.pred) ?? filasPorCodigo.get(dep.pred);
         if (!pred || !visibles.includes(pred)) continue;
-        const ox = pred.hito ? xDe(pred.inicioDias) : xDe(pred.terminoDias + 1);
-        const oy = yCentroDe(pred);
-        const sx = xDe(g.inicioDias);
-        const sy = yCentroDe(g);
+        const tipo = dep.tipo;
+        const saleDe = tipo === "fs" || tipo === "ff" ? "fin" : "ini";
+        const llegaA = tipo === "fs" || tipo === "ss" ? "ini" : "fin";
+        const ox = extremo(pred, saleDe);
+        const sx = extremo(g, llegaA);
         if (ox < xIni || ox > anchoTotal || sx < xIni || sx > anchoTotal) continue;
-        const mx = (ox + sx) / 2;
-        const c = resaltada ? colorTarea : colorDependencia;
-        const w = resaltada ? pt(1) : pt(0.5);
-        out.push(linea(ox, oy, mx, oy, c, w));
-        out.push(linea(mx, oy, mx, sy, c, w));
-        out.push(linea(mx, sy, sx, sy, c, w));
-        if (resaltada) {
-          out.push(linea(sx, sy, sx - flecha, sy - flecha * 0.9, c, w));
-          out.push(linea(sx, sy, sx - flecha, sy + flecha * 0.9, c, w));
+        const yp = yCentroDe(pred);
+        const ys = yCentroDe(g);
+        const d1 = saleDe === "fin" ? 1 : -1; // hacia dónde sale de la predecesora
+        const d2 = llegaA === "ini" ? -1 : 1; // por qué lado entra a la sucesora
+        const p1x = ox + d1 * hueco;
+        const p2x = sx + d2 * hueco;
+
+        let puntos: [number, number][];
+        if (tipo === "fs" ? p1x <= p2x : tipo !== "sf") {
+          // giro directo: sale, baja/sube en una vertical y entra
+          const xm = tipo === "fs" ? p1x : tipo === "ff" ? Math.max(p1x, p2x) : Math.min(p1x, p2x);
+          puntos = [[ox, yp], [xm, yp], [xm, ys], [sx, ys]];
         } else {
-          out.push(linea(sx, sy, sx - flecha, sy - flecha * 0.9, c, pt(0.5)));
-          out.push(linea(sx, sy, sx - flecha, sy + flecha * 0.9, c, pt(0.5)));
+          // sin espacio: rodea por el margen de la fila de la sucesora
+          const yb = ys - (ys > yp ? 1 : -1) * altoFilaPx * 0.42;
+          puntos = [[ox, yp], [p1x, yp], [p1x, yb], [p2x, yb], [p2x, ys], [sx, ys]];
         }
+
+        const enfocada = resaltar !== undefined && (g.codigo === resaltar || pred.codigo === resaltar);
+        const critica = resaltarCritico && pred.critico === true && g.critico === true;
+        const c = enfocada ? colorTarea : critica ? colorCritico : colorDependencia;
+        const w = enfocada ? pt(1.3) : pt(0.8);
+        out.push(
+          `<path d="${rutaRedondeada(puntos, radioEsquina)}" fill="none" stroke="${c}" stroke-width="${fmt(w)}" stroke-linejoin="round" stroke-linecap="round"/>`,
+        );
+        const bx = sx + d2 * largoPunta;
+        out.push(
+          `<path d="M ${fmt(sx)} ${fmt(ys)} L ${fmt(bx)} ${fmt(ys - mediaPunta)} L ${fmt(bx)} ${fmt(ys + mediaPunta)} Z" fill="${c}"/>`,
+        );
       }
     }
   }

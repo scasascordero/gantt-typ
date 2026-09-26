@@ -250,7 +250,14 @@ console.log("\n== solo linea de tiempo (zoom x2) ==");
 
   const lineaTiempoBase = gb.ancho - (gb.tablaX ?? 0);
   pasa("solo: tablaX en 0", gs.tablaX === 0);
-  pasa("solo: la tabla HTML conserva sus celdas y ancho", (gs.celdas ?? []).length === (gb.celdas ?? []).length && gs.anchoTabla === gb.anchoTabla);
+  // La tabla conserva las mismas celdas; en pantalla la sangría por nivel es la mitad, así que su
+  // ancho es igual o algo menor que el de impresión (nunca mayor).
+  pasa(
+    "solo: la tabla HTML conserva sus celdas y su ancho no supera al de impresion",
+    (gs.celdas ?? []).length === (gb.celdas ?? []).length &&
+      (gs.anchoTabla ?? 0) > 0 &&
+      (gs.anchoTabla ?? 0) <= (gb.anchoTabla ?? 0),
+  );
   pasa("solo: ancho == linea-tiempo * zoom", Math.abs(gs.ancho - lineaTiempoBase * 2) < 0.01, `ancho=${gs.ancho.toFixed(2)} esperado=${(lineaTiempoBase * 2).toFixed(2)}`);
   pasa("solo: calendario arranca en x=0", (gs.calendario?.x0 ?? -1) === 0);
   pasa("solo: mismas filas dibujadas", gs.bandas.length === gb.bandas.length && gs.bandas[0].codigo === gb.bandas[0].codigo);

@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import ejemploDatos from "../../ejemplos/ejemplo_1.yaml?raw";
 import { fuentesLibreria, necesitaCpm } from "./lib/libreria";
-import { dibujarGantt, type VistaGantt } from "./lib/layout-gantt";
+import { dibujarGantt, formatearFecha, type VistaGantt } from "./lib/layout-gantt";
 import { TablaGantt, type CeldaEdicion } from "./TablaGantt";
 import { listarTareas } from "./lib/yamlLineas";
 import { validarTexto, idLibre } from "./lib/validacion";
@@ -232,6 +232,17 @@ function App() {
   // los límites de la ventana temporal. Con datos inválidos queda en null
   // (panel en blanco; los diagnósticos muestran el motivo).
   const [filasPanel, setFilasPanel] = useState<Fila[] | null>(null);
+  // Vista previa local de la barra que se arrastra: la barra se mueve al
+  // instante sin esperar al motor ni tocar el YAML (que se escribe una sola
+  // vez al soltar). Se descarta cuando llegan las filas reales del motor.
+  const [previaArrastre, setPreviaArrastre] = useState<{
+    codigo: string;
+    modo: "mover" | "izq" | "der";
+    inicioDias: number;
+    terminoDias: number;
+    duracion: number;
+    ventana: { inicio: number; fin: number };
+  } | null>(null);
   useEffect(() => {
     let vivo = true;
     const id = window.setTimeout(async () => {
@@ -246,9 +257,15 @@ function App() {
           inicioProyecto: fechaOpt("inicio-proyecto"),
           terminoProyecto: fechaOpt("termino-proyecto"),
         });
-        if (vivo) setFilasPanel(filas);
+        if (vivo) {
+          setFilasPanel(filas);
+          setPreviaArrastre(null);
+        }
       } catch {
-        if (vivo) setFilasPanel(null);
+        if (vivo) {
+          setFilasPanel(null);
+          setPreviaArrastre(null);
+        }
       }
     }, 250);
     return () => {
@@ -264,16 +281,63 @@ function App() {
   // En pantalla el SVG lleva solo calendario y barras (1:1 en px); la tabla es
   // HTML aparte. El zoom no entra aquí: se aplica como CSS a toda la carta.
   const [anchoCarta, setAnchoCarta] = useState(0);
+  const filasVista = useMemo(() => {
+    if (!filasPanel || !previaArrastre) return filasPanel;
+    return filasPanel.map((f) =>
+      f.codigo === previaArrastre.codigo
+        ? {
+            ...f,
+            inicioDias: previaArrastre.inicioDias,
+            terminoDias: previaArrastre.terminoDias,
+            duracion: previaArrastre.duracion,
+          }
+        : f,
+    );
+  }, [filasPanel, previaArrastre]);
   const vista = useMemo<VistaGantt | null>(() => {
-    const filas = filasPanel;
+    const filas = filasVista;
     if (!filas) return null;
-    return dibujarGantt(filas, parametros, seleccion?.codigo ?? undefined, {
+    // Con un arrastre en curso la ventana del calendario se congela: si no, al
+    // mover la primera/última tarea la escala cambiaría bajo el puntero.
+    const p = previaArrastre
+      ? {
+          ...parametros,
+          "ventana-inicio": fechaIso(previaArrastre.ventana.inicio),
+          "ventana-fin": fechaIso(previaArrastre.ventana.fin),
+        }
+      : parametros;
+    return dibujarGantt(filas, p, seleccion?.codigo ?? undefined, {
       soloLineaTiempo: true,
       anchoDisponible: anchoCarta > 0 ? anchoCarta : undefined,
     });
-  }, [filasPanel, parametros, seleccion, anchoCarta]);
+  }, [filasVista, parametros, previaArrastre, seleccion, anchoCarta]);
   const svg = vista?.svg ?? null;
   const geometria = vista?.geometria ?? null;
+
+  // Etiqueta que acompaña a la barra mientras se arrastra: inicio al moverla;
+  // duración (y término) al estirar el borde derecho; inicio y duración al
+  // estirar el izquierdo.
+  const etiquetaArrastre = useMemo(() => {
+    const b = previaArrastre && geometria?.barras.find((x) => x.codigo === previaArrastre.codigo);
+    if (!previaArrastre || !b || !geometria) return null;
+    const texto =
+      previaArrastre.modo === "mover"
+        ? `Inicio: ${formatearFecha(previaArrastre.inicioDias)}`
+        : previaArrastre.modo === "der"
+          ? `Duración: ${previaArrastre.duracion} d · Término: ${formatearFecha(previaArrastre.terminoDias)}`
+          : `Inicio: ${formatearFecha(previaArrastre.inicioDias)} · Duración: ${previaArrastre.duracion} d`;
+    // El inicio se muestra a la izquierda de la barra (junto a su comienzo) y la
+    // duración/término a la derecha (junto al borde que se estira); si al lado
+    // elegido no cabe, pasa al opuesto.
+    const alaIzquierda =
+      previaArrastre.modo === "der" ? b.x + b.w > geometria.ancho * 0.7 : b.x > 190;
+    return {
+      texto,
+      top: b.cy,
+      left: alaIzquierda ? b.x - 8 : b.x + b.w + 8,
+      alaIzquierda,
+    };
+  }, [previaArrastre, geometria]);
   const milis = vista?.milis ?? 0;
 
   // el nombre del archivo abierto se muestra en el título de la ventana
@@ -340,8 +404,8 @@ function App() {
   // colapso): fuente de verdad para las interacciones. Se resuelven por
   // `codigo` porque `tareas`/`listarTareas` puede divergir en número y orden.
   const filasPorCodigo = useMemo(
-    () => new Map((filasPanel ?? []).map((f) => [f.codigo, f] as const)),
-    [filasPanel],
+    () => new Map((filasVista ?? []).map((f) => [f.codigo, f] as const)),
+    [filasVista],
   );
 
   // "Colapsar" avanza un nivel por clic: 1, 2, … hasta cubrir el nivel más
@@ -565,6 +629,8 @@ function App() {
     modo: "mover" | "izq" | "der";
     diaIni: number;
     diaFin: number;
+    /** Día bajo el puntero al agarrar: el desplazamiento se mide desde aquí. */
+    diaAgarre: number;
     ultimoInicio: number;
     ultimoFin: number;
   }
@@ -610,13 +676,16 @@ function App() {
       setPropiedadesAbierto(null);
       const diaIni = Math.round(diaEnPx(barra.x));
       const diaFin = Math.round(diaEnPx(barra.x + barra.w)) - 1;
-      const enIzq = px <= barra.x + tol;
-      const enDer = px >= barra.x + barra.w - tol;
+      // zona de agarre de los bordes: 8px, sin pasar de un tercio de la barra
+      const zona = Math.min(8 * esc.fx, barra.w / 3);
+      const enIzq = px <= barra.x + zona;
+      const enDer = px >= barra.x + barra.w - zona;
       arrastreRef.current = {
         codigo: barra.codigo,
         modo: t.esGrupo || t.hito || (!enIzq && !enDer) ? "mover" : enIzq ? "izq" : "der",
         diaIni,
         diaFin,
+        diaAgarre: Math.round(diaEnPx(px)),
         ultimoInicio: diaIni,
         ultimoFin: diaFin,
       };
@@ -641,9 +710,12 @@ function App() {
         const barra = g.barras.find(
           (b) => px >= b.x - tol && px <= b.x + b.w + tol && py >= b.y - tol && py <= b.y + b.h + tol,
         );
+        const zona = barra ? Math.min(8 * esc.fx, barra.w / 3) : 0;
+        const fila = barra?.codigo ? filasPanel?.find((x) => x.codigo === barra.codigo) : undefined;
+        const estirable = !!fila && !fila.esGrupo && !fila.hito;
         caja.style.cursor = !barra
           ? ""
-          : px <= barra.x + tol || px >= barra.x + barra.w - tol
+          : estirable && (px <= barra.x + zona || px >= barra.x + barra.w - zona)
             ? "ew-resize"
             : "move";
         return;
@@ -651,63 +723,63 @@ function App() {
 
       const diaApuntado = Math.round(diaEnPx(px));
       const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
-      let textoNuevo: string | null = null;
-
+      const dur = d.diaFin - d.diaIni;
+      let ini = d.ultimoInicio;
+      let fin = d.ultimoFin;
       if (d.modo === "mover") {
-        const nuevo = clamp(d.diaIni + (diaApuntado - d.diaIni), g.dias.inicio, g.dias.fin);
-        if (nuevo !== d.ultimoInicio) {
-          try {
-            textoNuevo = editarCampoConsistente(textoRef.current, d.codigo, "inicio", fechaIso(nuevo));
-          } catch (err) {
-            setMensaje(`Error al mover: ${String(err)}`);
-          }
-          if (textoNuevo) {
-            d.ultimoInicio = nuevo;
-            ponerEnEditor(textoNuevo);
-          }
-        }
+        ini = clamp(d.diaIni + (diaApuntado - d.diaAgarre), g.dias.inicio, g.dias.fin - dur);
+        fin = ini + dur;
       } else if (d.modo === "izq") {
-        const nuevoIni = clamp(diaApuntado, g.dias.inicio, d.diaFin);
-        if (nuevoIni !== d.ultimoInicio) {
-          try {
-            let t1 = editarCampoConsistente(textoRef.current, d.codigo, "termino", fechaIso(d.diaFin));
-            t1 = editarCampo(t1, d.codigo, "inicio", fechaIso(nuevoIni));
-            textoNuevo = editarCampoConsistente(t1, d.codigo, "termino", fechaIso(d.diaFin));
-          } catch (err) {
-            setMensaje(`Error al estirar: ${String(err)}`);
-          }
-          if (textoNuevo) {
-            d.ultimoInicio = nuevoIni;
-            ponerEnEditor(textoNuevo);
-          }
-        }
+        ini = clamp(d.diaIni + (diaApuntado - d.diaAgarre), g.dias.inicio, d.diaFin);
       } else {
-        const nuevoFin = clamp(diaApuntado - 1, d.diaIni, g.dias.fin);
-        if (nuevoFin !== d.ultimoFin) {
-          try {
-            textoNuevo = editarCampoConsistente(textoRef.current, d.codigo, "termino", fechaIso(nuevoFin));
-          } catch (err) {
-            setMensaje(`Error al estirar: ${String(err)}`);
-          }
-          if (textoNuevo) {
-            d.ultimoFin = nuevoFin;
-            ponerEnEditor(textoNuevo);
-          }
-        }
+        fin = clamp(d.diaFin + (diaApuntado - d.diaAgarre), d.diaIni, g.dias.fin);
       }
+      if (ini === d.ultimoInicio && fin === d.ultimoFin) return;
+      d.ultimoInicio = ini;
+      d.ultimoFin = fin;
+      setPreviaArrastre({
+        codigo: d.codigo,
+        modo: d.modo,
+        inicioDias: ini,
+        terminoDias: fin,
+        duracion: d.modo === "mover" ? (filasPanel?.find((x) => x.codigo === d.codigo)?.duracion ?? fin - ini + 1) : fin - ini + 1,
+        ventana: { inicio: g.dias.inicio, fin: g.dias.fin },
+      });
     },
-    [geometria, escalaSvg, diaEnPx, ponerEnEditor],
+    [geometria, escalaSvg, diaEnPx, filasPanel],
   );
 
   const terminarArrastre = useCallback(
     (e: React.PointerEvent) => {
-      if (!arrastreRef.current) return;
+      const d = arrastreRef.current;
+      if (!d) return;
       arrastreRef.current = null;
       const caja = svgCaja.current;
       if (caja && caja.hasPointerCapture(e.pointerId)) caja.releasePointerCapture(e.pointerId);
       if (caja) caja.style.cursor = "";
+      // Una sola escritura al YAML al soltar (la vista previa ya mostró el resultado).
+      if (d.ultimoInicio === d.diaIni && d.ultimoFin === d.diaFin) {
+        setPreviaArrastre(null);
+        return;
+      }
+      let textoNuevo: string | null = null;
+      try {
+        if (d.modo === "mover") {
+          textoNuevo = editarCampoConsistente(textoRef.current, d.codigo, "inicio", fechaIso(d.ultimoInicio));
+        } else if (d.modo === "izq") {
+          let t1 = editarCampoConsistente(textoRef.current, d.codigo, "termino", fechaIso(d.diaFin));
+          t1 = editarCampo(t1, d.codigo, "inicio", fechaIso(d.ultimoInicio));
+          textoNuevo = editarCampoConsistente(t1, d.codigo, "termino", fechaIso(d.diaFin));
+        } else {
+          textoNuevo = editarCampoConsistente(textoRef.current, d.codigo, "termino", fechaIso(d.ultimoFin));
+        }
+      } catch (err) {
+        setMensaje(`Error al ${d.modo === "mover" ? "mover" : "estirar"}: ${String(err)}`);
+      }
+      if (textoNuevo && textoNuevo !== textoRef.current) ponerEnEditor(textoNuevo);
+      else setPreviaArrastre(null);
     },
-    [],
+    [ponerEnEditor],
   );
 
   const cerrarMenu = useCallback(() => setMenuAbierto(false), []);
@@ -1577,6 +1649,14 @@ function App() {
                     style={{ marginTop: vista?.svgCabecera ? -geometria.altoEncabezado : 0 }}
                     dangerouslySetInnerHTML={{ __html: svg }}
                   />
+                  {etiquetaArrastre && (
+                    <div
+                      className={`etiqueta-arrastre${etiquetaArrastre.alaIzquierda ? " etiqueta-arrastre-izq" : ""}`}
+                      style={{ top: etiquetaArrastre.top, left: etiquetaArrastre.left }}
+                    >
+                      {etiquetaArrastre.texto}
+                    </div>
+                  )}
                   {rectSel && (
                     <div
                       className="seleccion-carta"

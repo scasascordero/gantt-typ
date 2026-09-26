@@ -438,6 +438,25 @@ body,
   background: #ffffff;
 }
 
+/* Etiqueta que sigue a la barra durante el arrastre (inicio / duración). */
+.etiqueta-arrastre {
+  position: absolute;
+  z-index: 4;
+  transform: translateY(-50%);
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: #1e293b;
+  color: #ffffff;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.3);
+}
+.etiqueta-arrastre-izq {
+  transform: translate(-100%, -50%);
+}
+
 /* Resaltado de la fila seleccionada (overlay sobre el SVG escalado). */
 .seleccion-carta {
   position: absolute;

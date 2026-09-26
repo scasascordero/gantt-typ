@@ -143,7 +143,7 @@ function diasEnRango(diaMin: number, diaMax: number): { inicio: number; fin: num
   return seg;
 }
 
-function formatearFecha(z: number): string {
+export function formatearFecha(z: number): string {
   const f = fechaDesdeDias(z);
   return `${String(f.dia).padStart(2, "0")}-${String(f.mes).padStart(2, "0")}-${f.anio}`;
 }

@@ -351,24 +351,49 @@
   (inicio-dias: inicio-dias, termino-dias: termino-dias, duracion: duracion)
 }
 
-// Precio unitario de una actividad a partir de su descomposición `recursos`
-// (análisis de precios unitarios). Cada recurso contribuye con la cuota
-// `cantidad x precio / rendimiento` (rendimiento 1 por defecto). El campo
-// `recursos` admite una lista de mapas o un diccionario clave -> mapa/valor.
-// Con `recursos-de` (catálogo raíz `recursos:`, dict llave -> {tipo?,
-// nombre?, medida?, precio}) una entrada sin `precio` inline resuelve el
-// precio de la llave/nombre del catálogo; el precio inline manda.
-// Si la actividad declara `costo-unitario` explícito, ese manda.
-#let precio-unitario-de-recursos(item, recursos-de: none) = {
+// Precio de una llave/nombre citada en el catálogo `recursos-de`: si la
+// entrada trae `precio`, ese es el precio (Recurso Básico); si en cambio
+// trae `recursos`, es una Actividad Auxiliar (APU compuesto) y su costo
+// unitario se resuelve recursivamente, a N niveles, sumando las cuotas de
+// sus propios componentes (que a su vez pueden citar otras auxiliares).
+// `pila` lleva las llaves de catálogo en resolución; si una Actividad
+// Auxiliar termina citándose a sí misma (directa o indirectamente), se
+// corta la recursión con un `panic` explícito en vez de recursar sin fin.
+#let precio-de-catalogo(nombre, recursos-de, pila) = {
+  if recursos-de == none { return none }
+  let cat = recursos-de.at(nombre, default: none)
+  if type(cat) != dictionary { return none }
+  let precio = a-numero(cat.at("precio", default: none))
+  if precio != none { return precio }
+  let sub = cat.at("recursos", default: none)
+  if sub == none { return none }
+  if pila.contains(nombre) {
+    panic("APU: dependencia circular entre actividades auxiliares del catálogo: " + pila.join(" -> ") + " -> " + nombre)
+  }
+  precio-unitario-de-recursos-pila((recursos: sub), recursos-de, pila + (nombre,))
+}
+
+// Cuota de un recurso `cantidad x precio x (1 + desperdicio) / rendimiento`
+// (rendimiento 1 y desperdicio 0 por defecto). El precio es inline si lo
+// trae; si no, sale del catálogo por su llave/nombre (`precio-de-catalogo`,
+// que resuelve Actividades Auxiliares recursivamente).
+#let cuota-de-recurso(r, recursos-de, pila) = {
+  let cantidad = a-formula(r.at("cantidad", default: none))
+  let precio = a-numero(r.at("precio", default: none))
+  let precio-final = if precio != none { precio } else { precio-de-catalogo(r.at("nombre", default: ""), recursos-de, pila) }
+  let rendimiento = a-formula(r.at("rendimiento", default: none))
+  let desperdicio = a-formula(r.at("desperdicio", default: none))
+  if cantidad == none or precio-final == none { 0.0 } else {
+    let divisor = if rendimiento == none or rendimiento <= 0.0 { 1.0 } else { rendimiento }
+    let desp = if desperdicio == none { 0.0 } else { desperdicio }
+    cantidad * precio-final * (1.0 + desp) / divisor
+  }
+}
+
+#let precio-unitario-de-recursos-pila(item, recursos-de, pila) = {
   let recursos = item.at("recursos", default: none)
   if recursos == none {
     return none
-  }
-  let precio-catalogo(nombre) = {
-    if recursos-de == none { return none }
-    let cat = recursos-de.at(nombre, default: none)
-    if type(cat) != dictionary { return none }
-    a-formula(cat.at("precio", default: none))
   }
   let lista = if type(recursos) == dictionary {
     recursos.pairs().map(pair => {
@@ -380,17 +405,20 @@
   } else {
     recursos
   }
-  let cuotas = lista.map(r => {
-    let cantidad = a-formula(r.at("cantidad", default: none))
-    let precio = a-numero(r.at("precio", default: none))
-    let precio-final = if precio != none { precio } else { precio-catalogo(r.at("nombre", default: "")) }
-    let rendimiento = a-formula(r.at("rendimiento", default: none))
-    if cantidad == none or precio-final == none { 0.0 } else {
-      let divisor = if rendimiento == none or rendimiento <= 0.0 { 1.0 } else { rendimiento }
-      cantidad * precio-final / divisor
-    }
-  })
+  let cuotas = lista.map(r => cuota-de-recurso(r, recursos-de, pila))
   if cuotas.len() == 0 { none } else { cuotas.sum() }
+}
+
+// Precio unitario de una actividad a partir de su descomposición `recursos`
+// (análisis de precios unitarios). El campo `recursos` admite una lista de
+// mapas o un diccionario clave -> mapa/valor. Con `recursos-de` (catálogo
+// raíz `recursos:`, dict llave -> {tipo?, nombre?, medida?, precio} o
+// llave -> {recursos: [...]} para una Actividad Auxiliar) una entrada sin
+// `precio` inline resuelve el precio de la llave/nombre del catálogo; el
+// precio inline manda. Si la actividad declara `costo-unitario` explícito,
+// ese manda (ver `resolver-nodo`).
+#let precio-unitario-de-recursos(item, recursos-de: none) = {
+  precio-unitario-de-recursos-pila(item, recursos-de, ())
 }
 
 // Resuelve, en post-orden, fechas/duración/avance de UNA tarea (recursivo
@@ -413,7 +441,20 @@
     // manda sobre el producto. `unidad` es solo texto descriptivo.
     let cantidad = a-formula(item.at("cantidad", default: none))
     let cu-expl = a-numero(item.at("costo-unitario", default: none))
-    let cu = if cu-expl != none { cu-expl } else { precio-unitario-de-recursos(item, recursos-de: recursos-de) }
+    // costo-unitario explícito manda; si no, sale del APU inline (`recursos`)
+    // o, en su defecto, del vínculo `apu: <llave>` a una Partida reutilizable
+    // del catálogo `recursos-de`.
+    let cu = if cu-expl != none {
+      cu-expl
+    } else {
+      let de-recursos = precio-unitario-de-recursos(item, recursos-de: recursos-de)
+      if de-recursos != none {
+        de-recursos
+      } else {
+        let clave = item.at("apu", default: none)
+        if clave != none { precio-de-catalogo(clave, recursos-de, ()) } else { none }
+      }
+    }
     let costo-expl = a-numero(item.at("costo", default: none))
     let costo = if costo-expl != none { costo-expl }
       else if cantidad != none and cu != none { cantidad * cu }
@@ -569,6 +610,27 @@
   // los grupos son solo el "sobre" de sus hijas y no participan en la red.
   let es-hoja(codigo) = not (codigo in indice.hijos-de)
 
+  // Hojas y subtareas (de cualquier nivel) que contiene un grupo.
+  let hojas-de(codigo) = {
+    let hs = indice.hijos-de.at(codigo, default: ())
+    if hs.len() == 0 { (codigo,) } else { hs.map(hojas-de).flatten() }
+  }
+  let descendientes(codigo) = {
+    indice.hijos-de.at(codigo, default: ()).map(h => (h,) + descendientes(h)).flatten()
+  }
+
+  // Un grupo no puede depender de una de sus propias subtareas.
+  for it in plano {
+    if es-hoja(it.codigo) { continue }
+    let desc = descendientes(it.codigo)
+    for d in interpretar-predecesoras(it.at("predecesoras", default: none)).map(a-dep-codigo) {
+      assert(
+        not (d.pred in desc),
+        message: "El grupo '" + it.codigo + "' no puede depender de su propia subtarea '" + d.pred + "'",
+      )
+    }
+  }
+
   let res-cpm = none
   let fechas-de = none
   let critico-de = none
@@ -613,8 +675,14 @@
         predecesoras: interpretar-predecesoras(it.at("predecesoras", default: none)).map(a-dep-codigo),
       ))
     }
+    // Grupos -> sus hojas: una dependencia puede apuntar a un grupo.
+    let grupos = (:)
+    for it in plano {
+      if not es-hoja(it.codigo) { grupos.insert(it.codigo, hojas-de(it.codigo)) }
+    }
     let r = calcular-cpm(
       hojas,
+      grupos: grupos,
       inicio-proyecto: dia-proyecto,
       termino-proyecto: dia-proyecto-term,
     )

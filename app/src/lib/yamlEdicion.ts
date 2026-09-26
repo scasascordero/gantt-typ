@@ -346,6 +346,9 @@ export interface RecursoCatalogo {
 
 // Lee la sección raíz `recursos:` (llave -> {tipo?, nombre?, medida?,
 // precio?}) en orden estable; devuelve lista vacía si no existe o no es mapa.
+// Las llaves que son Actividades Auxiliares (APU compuesto: declaran
+// `recursos` propios en vez de `precio`) se omiten de esta lista plana — este
+// diálogo solo edita recursos simples; una auxiliar se edita en el YAML.
 export function leerRecursosYaml(texto: string): RecursoCatalogo[] {
   const out: RecursoCatalogo[] = [];
   const doc = parseDocument(texto);
@@ -356,6 +359,7 @@ export function leerRecursosYaml(texto: string): RecursoCatalogo[] {
     const llave = String(pair.key);
     const v = pair.value;
     const m = (isMap(v) ? v.toJSON() : null) as Record<string, unknown> | null;
+    if (m && m.precio == null && m.recursos != null) continue; // Actividad Auxiliar: no editable acá
     out.push({
       llave,
       tipo: m ? textoDe(m.tipo) : "",
@@ -369,12 +373,23 @@ export function leerRecursosYaml(texto: string): RecursoCatalogo[] {
 
 // Reescribe la sección raíz `recursos:` desde la lista editada. Se omite la
 // sección si no queda ninguna llave. Conserva el orden de las llaves y el
-// resto del documento intacto.
+// resto del documento intacto, incluyendo las Actividades Auxiliares (que
+// `leerRecursosYaml` no expone y que por lo tanto hay que preservar tal cual).
 export function ponerRecursosYaml(texto: string, recursos: RecursoCatalogo[]): string {
   const doc = parseDocument(texto);
   if (doc.errors.length > 0) return texto;
+  const secOriginal = doc.get("recursos", true);
+  const auxiliares: Array<[unknown, unknown]> = [];
+  if (isMap(secOriginal)) {
+    for (const pair of secOriginal.items) {
+      const m = isMap(pair.value) ? (pair.value.toJSON() as Record<string, unknown>) : null;
+      if (m && m.precio == null && m.recursos != null) {
+        auxiliares.push([pair.key, pair.value]);
+      }
+    }
+  }
   const conDatos = recursos.filter((r) => r.llave.trim() !== "");
-  if (conDatos.length === 0) {
+  if (conDatos.length === 0 && auxiliares.length === 0) {
     doc.delete("recursos");
   } else {
     const mapa = doc.createNode({}) as YAMLMap;
@@ -385,6 +400,9 @@ export function ponerRecursosYaml(texto: string, recursos: RecursoCatalogo[]): s
       if (r.medida.trim() !== "") entrada.medida = r.medida.trim();
       if (r.precio.trim() !== "") entrada.precio = r.precio.trim();
       mapa.set(r.llave.trim(), doc.createNode(entrada));
+    }
+    for (const [llave, valor] of auxiliares) {
+      mapa.set(llave, valor);
     }
     doc.set("recursos", mapa);
   }

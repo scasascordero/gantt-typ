@@ -392,7 +392,7 @@ body,
   flex-direction: column;
   min-height: 0;
   overflow: clip;
-  padding: 16px;
+  padding: 5px;
   background: #e2e8f0;
 }
 
@@ -469,6 +469,7 @@ body,
   overflow: hidden;
 }
 .tabla-html-cab {
+  border-right: 1px solid #e2e8f0;
   position: absolute;
   top: 0;
   bottom: 0;
@@ -480,11 +481,16 @@ body,
   font-size: 11px;
   font-weight: 600;
   color: #334155;
-  white-space: nowrap;
+  text-align: center;
+  line-height: 1.1;
+  white-space: normal;
   overflow: hidden;
 }
-.tabla-html-der {
-  justify-content: flex-end;
+/* La primera columna de datos no tiene a su izquierda un título con borde
+   derecho: se dibuja 1px hacia afuera para caer en el mismo píxel que el borde
+   derecho de las celdas de nombre del cuerpo. */
+.tabla-html-cab:first-child {
+  box-shadow: -1px 0 0 #e2e8f0;
 }
 .tabla-html-celda {
   position: absolute;
@@ -494,6 +500,7 @@ body,
   padding: 0 3px;
   background: #ffffff;
   border-bottom: 1px solid #eef2f7;
+  border-right: 1px solid #e2e8f0;
   font-size: 11px;
   line-height: 1;
   color: #1e293b;

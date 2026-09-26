@@ -171,7 +171,7 @@ export const ETIQUETAS: Record<string, string> = {
   avance: "Avance",
   cantidad: "Cantidad",
   unidad: "Unidad",
-  "costo-unitario": "C. unitario",
+  "costo-unitario": "Costo Unitario",
   costo: "Costo",
   holgura: "Holgura",
   critico: "Crít.",
@@ -193,10 +193,10 @@ export const COL_CAMPO: Record<string, string> = {
   "costo-unitario": "costo-unitario",
 };
 
-// Números y fechas van alineados a la derecha; solo el texto (unidad, marca
-// de crítico) queda centrado.
+// Números y fechas van alineados a la derecha; la duración, el texto (unidad)
+// y la marca de crítico quedan centrados.
 export function esColumnaDerecha(col: string): boolean {
-  return col !== "unidad" && col !== "critico";
+  return col !== "duracion" && col !== "unidad" && col !== "critico";
 }
 
 export function valorColumna(f: Fila, col: string): string {
@@ -357,14 +357,18 @@ export function dibujarGantt(
     }, 0);
     anchoNombreFinal = maxAncho + cm(0.9);
   }
+  // Anchos enteros: las columnas caen en píxeles exactos y los bordes de la
+  // tabla HTML (celdas y cabecera) coinciden sin desfase de 1px.
+  anchoNombreFinal = Math.round(anchoNombreFinal);
 
   // --- Columnas de datos opcionales -----------------------------------------
   const bold = (s: string) => medir(s, tamanoFuente, "bold", "normal", fuente);
 
   const anchosColumnas = mostrarColumnas.map((col) => {
-    const anchoEtiqueta = bold(ETIQUETAS[col] ?? col);
+    // El título puede partirse en líneas: basta el ancho de su palabra más larga.
+    const anchoEtiqueta = Math.max(...(ETIQUETAS[col] ?? col).split(" ").map(bold));
     const anchoValores = visibles.reduce((acc, f) => Math.max(acc, regular(valorColumna(f, col))), 0);
-    return Math.max(anchoEtiqueta, anchoValores) + cm(0.5);
+    return Math.round(Math.max(anchoEtiqueta, anchoValores) + cm(0.5));
   });
   const colXInicios: number[] = [];
   {
@@ -389,9 +393,16 @@ export function dibujarGantt(
   const anchoPorDia = anchoLineaTiempo / totalDias;
 
   const altoBandaAnio = mostrarAnio ? cm(0.4) : 0;
-  const altoBandaMes = mostrarMes ? cm(0.5) : 0;
   const altoBandaSemana = mostrarSemana ? cm(0.4) : 0;
   const altoBandaDia = mostrarDia ? cm(0.4) : 0;
+  // En pantalla los títulos de columna con espacio ("Costo Unitario") se parten
+  // en dos líneas: la cabecera necesita al menos esa altura; el extra lo toma
+  // la banda de meses para que el calendario siga llenando la cabecera.
+  const altoMinEncabezado =
+    solo && mostrarColumnas.some((c) => (ETIQUETAS[c] ?? c).includes(" ")) ? cm(0.8) : 0;
+  const altoBandaMes = mostrarMes
+    ? cm(0.5) + Math.max(0, altoMinEncabezado - (altoBandaAnio + cm(0.5) + altoBandaSemana + altoBandaDia))
+    : 0;
   const altoEncabezado = altoBandaAnio + altoBandaMes + altoBandaSemana + altoBandaDia;
   const altoFilas = visibles.length * altoFilaPx;
   const y0 = altoEncabezado;

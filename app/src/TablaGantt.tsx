@@ -88,7 +88,7 @@ export function TablaGantt(props: Props) {
         {cabeceras.map((cd) => (
           <span
             key={cd.campo}
-            className={`tabla-html-cab${esColumnaDerecha(cd.campo) ? " tabla-html-der" : ""}`}
+            className="tabla-html-cab"
             style={{
               left: cd.x0,
               width: cd.x1 - cd.x0,

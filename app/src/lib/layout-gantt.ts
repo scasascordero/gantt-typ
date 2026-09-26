@@ -171,7 +171,7 @@ export const ETIQUETAS: Record<string, string> = {
   avance: "Avance",
   cantidad: "Cantidad",
   unidad: "Unidad",
-  "costo-unitario": "Costo Unitario",
+  "costo-unitario": "C.U.",
   costo: "Costo",
   holgura: "Holgura",
   critico: "Crít.",
@@ -412,7 +412,7 @@ export function dibujarGantt(
   const altoBandaAnio = mostrarAnio ? cm(0.4) : 0;
   const altoBandaSemana = mostrarSemana ? cm(0.4) : 0;
   const altoBandaDia = mostrarDia ? cm(0.4) : 0;
-  // En pantalla los títulos de columna con espacio ("Costo Unitario") se parten
+  // En pantalla los títulos de columna con espacio ("Ini. temp.") se parten
   // en dos líneas: la cabecera necesita al menos esa altura; el extra lo toma
   // la banda de meses para que el calendario siga llenando la cabecera.
   const altoMinEncabezado =

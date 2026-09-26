@@ -11,6 +11,8 @@ interface NodoMs {
   codigo: string;
   codigoPropio: boolean;
   hito: boolean;
+  /** Duración de 1 día laboral o menos en el archivo (MS empuja el término al siguiente día hábil, p. ej. tras un fin de semana). */
+  corta: boolean;
   inicio?: string;
   termino?: string;
   avance?: number;
@@ -43,6 +45,7 @@ function decod(s: string): string {
 export function desdeMSPDI(xml: string): string {
   const uidCodigo = new Map<string, string>();
   const nodos: NodoMs[] = [];
+  const minutosPorDia = Number(campo(xml, "MinutesPerDay") ?? "") || 480;
 
   for (const [, b] of xml.matchAll(/<Task>([\s\S]*?)<\/Task>/g)) {
     const nivel = Number(campo(b, "OutlineLevel") ?? "") || 0;
@@ -52,13 +55,19 @@ export function desdeMSPDI(xml: string): string {
     // editor; los de MS Project no lo traen y se usa OutlineNumber/WBS.
     const codigo = decod(campo(b, "Text1") ?? "") || decod(campo(b, "OutlineNumber") ?? "") || decod(campo(b, "WBS") ?? "");
     const pc = Number(campo(b, "PercentComplete") ?? "");
+    const nombre = decod(campo(b, "Name") ?? "");
+    const dm = campo(b, "Duration")?.match(/^PT(\d+)H(\d+)M/);
+    const durMin = dm ? Number(dm[1]) * 60 + Number(dm[2]) : undefined;
     nodos.push({
       uid,
-      nombre: decod(campo(b, "Name") ?? ""),
+      nombre,
       nivel,
       codigo,
       codigoPropio: codigo !== "",
-      hito: campo(b, "Milestone") === "1",
+      // hito: marcado como tal en MS Project, de duración 0, o llamado "Hito …"
+      // (hay archivos donde los hitos vienen como tareas de 1 día sin la marca)
+      hito: campo(b, "Milestone") === "1" || durMin === 0 || /^\s*hito\b/i.test(nombre),
+      corta: durMin !== undefined && durMin <= minutosPorDia,
       inicio: fechaDe(campo(b, "Start")),
       termino: fechaDe(campo(b, "Finish")),
       avance: Number.isFinite(pc) && pc > 0 ? pc / 100 : undefined,
@@ -113,8 +122,11 @@ export function desdeMSPDI(xml: string): string {
     lineas.push(`${pad}- codigo: ${yq(n.codigo)}`);
     lineas.push(`${pad2}nombre: ${yq(n.nombre)}`);
     if (n.inicio) lineas.push(`${pad2}inicio: ${n.inicio}`);
-    if (n.hito) lineas.push(`${pad2}hito: true`);
-    else if (n.termino && n.termino !== n.inicio) lineas.push(`${pad2}termino: ${n.termino}`);
+    // un grupo nunca es hito (MS marca así a algunos resúmenes); una hoja de 1 día
+    // laboral o menos se escribe sin `termino`, así dura 1 día aunque cruce un fin de semana
+    const hoja = n.hijos.length === 0;
+    if (hoja && n.hito) lineas.push(`${pad2}hito: true`);
+    else if (n.termino && n.termino !== n.inicio && !(hoja && n.corta)) lineas.push(`${pad2}termino: ${n.termino}`);
     if (n.avance !== undefined) lineas.push(`${pad2}avance: "${Math.round(n.avance * 100)}%"`);
     if (n.predecesoras.length) lineas.push(`${pad2}predecesoras: [${n.predecesoras.map(yq).join(", ")}]`);
     if (n.hijos.length) {

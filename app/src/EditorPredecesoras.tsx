@@ -1,10 +1,21 @@
 // EditorPredecesoras.tsx — diálogo que edita las predecesoras (dependencias)
-// de una actividad de forma visual: casillas con todas las demás tareas.
+// de una actividad: casillas con todas las demás tareas, tipo de enlace
+// (fs/ss/ff/sf) y lag en días. Guarda tokens en el formato que entiende el
+// motor: `pred`, `pred:tipo` o `pred:tipo:lag`.
 
 import { useMemo, useState } from "react";
 import { baseDeToken } from "./lib/yamlOperaciones";
 import type { Tarea } from "./lib/yamlLineas";
 import "./App.css";
+
+type TipoDep = "fs" | "ss" | "ff" | "sf";
+
+const TIPOS: { valor: TipoDep; etiqueta: string }[] = [
+  { valor: "fs", etiqueta: "fin→inicio" },
+  { valor: "ss", etiqueta: "inicio→inicio" },
+  { valor: "ff", etiqueta: "fin→fin" },
+  { valor: "sf", etiqueta: "inicio→fin" },
+];
 
 interface Props {
   codigo: string;
@@ -15,16 +26,29 @@ interface Props {
   onCerrar: () => void;
 }
 
+function tokenDe(base: string, tipo: TipoDep, lag: number): string {
+  if (tipo === "fs" && lag === 0) return base;
+  return lag === 0 ? `${base}:${tipo}` : `${base}:${tipo}:${lag}`;
+}
+
+function partesDe(token: string): { base: string; tipo: TipoDep; lag: number } {
+  const partes = token.trim().split(":");
+  const tipo = (["fs", "ss", "ff", "sf"] as TipoDep[]).includes(partes[1] as TipoDep)
+    ? (partes[1] as TipoDep)
+    : "fs";
+  const lag = Number.isFinite(Number(partes[2])) ? Math.trunc(Number(partes[2])) : 0;
+  return { base: partes[0] || token.trim(), tipo, lag };
+}
+
 export default function EditorPredecesoras({ codigo, nombre, tareas, cpm, onGuardar, onCerrar }: Props) {
   const otras = useMemo(() => tareas.filter((t) => t.id !== codigo), [tareas, codigo]);
   const actual = useMemo(() => tareas.find((t) => t.id === codigo)?.predecesoras ?? [], [tareas, codigo]);
 
-  // base → token bruto (conserva sufijos como "A:ss:2" si ya existían)
-  const [seleccion, setSeleccion] = useState<Map<string, string>>(() => {
-    const m = new Map<string, string>();
+  const [seleccion, setSeleccion] = useState<Map<string, { tipo: TipoDep; lag: number }>>(() => {
+    const m = new Map<string, { tipo: TipoDep; lag: number }>();
     for (const t of actual) {
       const base = baseDeToken(t);
-      if (base && !m.has(base)) m.set(base, t.trim());
+      if (base && !m.has(base)) m.set(base, partesDe(t));
     }
     return m;
   });
@@ -32,13 +56,23 @@ export default function EditorPredecesoras({ codigo, nombre, tareas, cpm, onGuar
   const marcar = (id: string, activa: boolean) => {
     setSeleccion((prev) => {
       const m = new Map(prev);
-      if (activa) m.set(id, id);
+      if (activa) m.set(id, { tipo: "fs", lag: 0 });
       else m.delete(id);
       return m;
     });
   };
 
-  const tokens = Array.from(seleccion.values());
+  const fijar = (id: string, cambios: Partial<{ tipo: TipoDep; lag: number }>) => {
+    setSeleccion((prev) => {
+      const m = new Map(prev);
+      const actualDep = m.get(id);
+      if (!actualDep) return prev;
+      m.set(id, { ...actualDep, ...cambios });
+      return m;
+    });
+  };
+
+  const tokens = Array.from(seleccion.entries()).map(([base, d]) => tokenDe(base, d.tipo, d.lag));
 
   return (
     <>
@@ -66,20 +100,52 @@ export default function EditorPredecesoras({ codigo, nombre, tareas, cpm, onGuar
           )}
           <div className="editor-pred-lista">
             {otras.length === 0 && <p className="editor-pred-vacio">No hay otras actividades.</p>}
-            {otras.map((t) => (
-              <label key={t.id} className="editor-pred-fila">
-                <input
-                  type="checkbox"
-                  checked={seleccion.has(t.id)}
-                  onChange={(e) => marcar(t.id, e.target.checked)}
-                />
-                <span className="editor-pred-tag">{t.id}</span>
-                <span className="editor-pred-nombre">{t.nombre}</span>
-              </label>
-            ))}
+            {otras.map((t) => {
+              const dep = seleccion.get(t.id);
+              const activa = dep !== undefined;
+              return (
+                <div key={t.id} className={"editor-pred-fila" + (activa ? " activa" : "")}>
+                  <label className="editor-pred-caja">
+                    <input
+                      type="checkbox"
+                      checked={activa}
+                      onChange={(e) => marcar(t.id, e.target.checked)}
+                    />
+                    <span className="editor-pred-tag">{t.id}</span>
+                    <span className="editor-pred-nombre">{t.nombre}</span>
+                  </label>
+                  {activa && (
+                    <span className="editor-pred-opciones">
+                      <select
+                        value={dep.tipo}
+                        onChange={(e) => fijar(t.id, { tipo: e.target.value as TipoDep })}
+                        title="Tipo de enlace"
+                      >
+                        {TIPOS.map((o) => (
+                          <option key={o.valor} value={o.valor}>
+                            {o.etiqueta}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min={-999}
+                        max={999}
+                        value={dep.lag}
+                        onChange={(e) => fijar(t.id, { lag: Math.trunc(Number(e.target.value) || 0) })}
+                        title="Lag en días (negativo = adelanto)"
+                        className="editor-pred-lag"
+                      />
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="editor-pred-pie">
-            <span className="editor-pred-resumen">{tokens.join(" ; ") || "sin predecesoras"}</span>
+            <span className="editor-pred-resumen">
+              {tokens.length ? tokens.join(" ; ") : "sin predecesoras"}
+            </span>
             <div className="editor-pred-acciones">
               <button className="editor-pred-cancelar" onClick={onCerrar}>
                 Cancelar

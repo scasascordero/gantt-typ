@@ -40,21 +40,35 @@ export function listarTareas(texto: string): Tarea[] {
       // (el get() directo de nodos devuelve colecciones crudas según el estilo).
       const datos = nodo.toJSON() as Record<string, unknown>;
       const codigo = datos.codigo;
+      const idCampo = datos.id;
       const nombre = datos.nombre;
       const linea = texto.slice(0, nodo.range ? nodo.range[0] : 0).split("\n").length;
-      if (typeof codigo === "string") {
-        resultado.push({
-          id: codigo,
-          nombre: typeof nombre === "string" ? nombre : String(codigo),
-          linea,
-          nivel,
-          predecesoras: tokensDePredecesoras(datos.predecesoras),
-          inicio: datos.inicio,
-          termino: datos.termino,
-          duracion: datos.duracion,
-          avance: datos.avance,
-        });
-      }
+      // El proyecto (primera tarea de la raíz) no lleva código WBS: se incluye
+      // igual, referenciado por su `id` o por código vacío (la edición y las
+      // operaciones lo ubican con ese valor). Sin esto, el índice de fila del
+      // clic quedaría desfasado respecto a las bandas dibujadas.
+      const id =
+        typeof codigo === "string"
+          ? codigo
+          : typeof idCampo === "string" && idCampo.trim()
+            ? idCampo.trim()
+            : "";
+      resultado.push({
+        id,
+        nombre:
+          typeof nombre === "string" && nombre.trim()
+            ? nombre
+            : typeof codigo === "string"
+              ? String(codigo)
+              : "Proyecto",
+        linea,
+        nivel,
+        predecesoras: tokensDePredecesoras(datos.predecesoras),
+        inicio: datos.inicio,
+        termino: datos.termino,
+        duracion: datos.duracion,
+        avance: datos.avance,
+      });
       // con `ocultar-subtareas: true` la librería no dibuja el subárbol:
       // hay que saltarlo también acá para que el clic siga filando justo
       if (datos["ocultar-subtareas"] === true) return;

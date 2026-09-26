@@ -9,8 +9,9 @@ config:
   titulo: "Centro de distribución — con análisis de precios unitarios (APU)"
   mostrar-columnas: [duracion, costo-unitario, costo]
 tareas:
-  - codigo: "0"
-    nombre: Proyecto centro de distribución
+  # El proyecto completo (primera tarea) no lleva número WBS; sus subtareas
+  # son el primer nivel.
+  - nombre: Proyecto centro de distribución
     subtareas:
       - codigo: "1"
         nombre: Planificación

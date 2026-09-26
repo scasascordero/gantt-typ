@@ -305,7 +305,10 @@ pub fn aplanar(lista: &serde_yaml::Value, padre_contexto: Option<String>, raiz: 
         let Some(m) = t.as_mapping() else { continue };
         let codigo = match campo(m, "codigo") {
             Some(Value::String(s)) => s.clone(),
-            _ => continue,
+            // El proyecto (primera tarea de la raíz) no lleva número WBS: puede
+            // no traer 'codigo'. Un valor no textual sí sigue siendo inválido.
+            Some(Value::Number(_)) => continue,
+            _ => String::new(),
         };
         let id = match campo(m, "id") {
             Some(Value::String(s)) if !s.trim().is_empty() => s.clone(),
@@ -353,4 +356,43 @@ pub struct OpcionesCpm {
     pub cpm: bool,
     pub inicio_proyecto: Option<String>,
     pub termino_proyecto: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::preparar::preparar_proyecto;
+
+    // El proyecto (primera tarea de la raíz) no lleva número WBS: puede no
+    // tener 'codigo'. Sus subtareas son el primer nivel ("1", "2"…).
+    #[test]
+    fn aplanar_acepta_proyecto_sin_codigo() {
+        let yaml = r#"tareas:
+  - nombre: Proyecto completo
+    subtareas:
+      - codigo: "1"
+        nombre: Fase A
+        inicio: 2026-01-05
+        duracion: 10
+      - codigo: "2"
+        nombre: Fase B
+        subtareas:
+          - codigo: "2.1"
+            nombre: B1
+            inicio: 2026-01-20
+            duracion: 5
+"#;
+        let valor: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let mut crudos: Vec<ItemCrudo> = Vec::new();
+        aplanar(&valor["tareas"], None, true, &mut crudos);
+        let codigos: Vec<&str> = crudos.iter().map(|c| c.codigo.as_str()).collect();
+        assert_eq!(codigos, ["", "1", "2", "2.1"]);
+
+        let filas =
+            preparar_proyecto(yaml, &OpcionesCpm { cpm: false, inicio_proyecto: None, termino_proyecto: None })
+                .unwrap();
+        let presentes: Vec<&str> = filas.iter().map(|f| f.codigo.as_str()).collect();
+        assert_eq!(presentes, ["", "1", "2", "2.1"]);
+        assert!(filas[0].es_grupo);
+    }
 }

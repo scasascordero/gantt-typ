@@ -162,7 +162,7 @@ function formatearImporte(v: number): string {
 
 // --- El render principal ----------------------------------------------------
 
-export function dibujarGantt(filas: Fila[], p: Params): VistaGantt {
+export function dibujarGantt(filas: Fila[], p: Params, resaltar?: string): VistaGantt {
   const t0 = performance.now();
 
   const fuente = String(p["fuente"] ?? "Liberation Sans");
@@ -223,7 +223,7 @@ export function dibujarGantt(filas: Fila[], p: Params): VistaGantt {
   if (visibles.length === 0) {
     return {
       svg: "",
-      geometria: { ancho: 0, alto: 0, bandas: [], barras: [] },
+      geometria: { ancho: 0, alto: 0, bandas: [], barras: [], tablaX: 0, dias: { inicio: 0, fin: 0 } },
       milis: performance.now() - t0,
     };
   }
@@ -559,8 +559,8 @@ export function dibujarGantt(filas: Fila[], p: Params): VistaGantt {
   }
 
   // --- Filas ----------------------------------------------------------------
-  const bandas: { y0: number; y1: number }[] = [];
-  const barras: { x: number; y: number; w: number; h: number; cx: number; cy: number }[] = [];
+  const bandas: { y0: number; y1: number; codigo: string }[] = [];
+  const barras: { x: number; y: number; w: number; h: number; cx: number; cy: number; codigo: string }[] = [];
   const filasPorId = new Map<string, Fila>();
   const filasPorCodigo = new Map<string, Fila>();
 
@@ -568,7 +568,7 @@ export function dibujarGantt(filas: Fila[], p: Params): VistaGantt {
     const yFilaTop = y0 + i * altoFilaPx;
     const yCentro = yFilaTop + altoFilaPx / 2;
     const yFilaBottom = yFilaTop + altoFilaPx;
-    bandas.push({ y0: yFilaTop + yDesp, y1: yFilaBottom + yDesp });
+    bandas.push({ y0: yFilaTop + yDesp, y1: yFilaBottom + yDesp, codigo: f.codigo });
     if (f.id) filasPorId.set(f.id, f);
     filasPorCodigo.set(f.codigo, f);
 
@@ -609,12 +609,12 @@ export function dibujarGantt(filas: Fila[], p: Params): VistaGantt {
         if (dibujarBarra) {
           dibujarBarraDesde(f, x1, x2, yCentro, altoB);
           if (mostrarAvance) barraAvance(x1Real, x2Real, x1, x2, yCentro, altoB, f.avance, avanceSerie);
-          barras.push({ x: x1, y: yCentro - altoB / 2 + yDesp, w: x2 - x1, h: altoB, cx: (x1 + x2) / 2, cy: yCentro + yDesp });
+          barras.push({ x: x1, y: yCentro - altoB / 2 + yDesp, w: x2 - x1, h: altoB, cx: (x1 + x2) / 2, cy: yCentro + yDesp, codigo: f.codigo });
         }
       } else {
         dibujarBarraDesde(f, x1, x2, yCentro, altoB);
         if (mostrarAvance) barraAvance(x1Real, x2Real, x1, x2, yCentro, altoB, f.avance, avanceSerie);
-        barras.push({ x: x1, y: yCentro - altoB / 2 + yDesp, w: x2 - x1, h: altoB, cx: (x1 + x2) / 2, cy: yCentro + yDesp });
+        barras.push({ x: x1, y: yCentro - altoB / 2 + yDesp, w: x2 - x1, h: altoB, cx: (x1 + x2) / 2, cy: yCentro + yDesp, codigo: f.codigo });
       }
     }
 
@@ -635,6 +635,7 @@ export function dibujarGantt(filas: Fila[], p: Params): VistaGantt {
   if (mostrarDependencias) {
     const flecha = pt(2.4);
     for (const g of visibles) {
+      const resaltada = resaltar !== undefined && g.codigo === resaltar;
       for (const dep of g.predecesoras) {
         const pred = filasPorId.get(dep.pred) ?? filasPorCodigo.get(dep.pred);
         if (!pred || !visibles.includes(pred)) continue;
@@ -644,11 +645,18 @@ export function dibujarGantt(filas: Fila[], p: Params): VistaGantt {
         const sy = yCentroDe(g);
         if (ox < anchoTabla || ox > anchoTotal || sx < anchoTabla || sx > anchoTotal) continue;
         const mx = (ox + sx) / 2;
-        out.push(linea(ox, oy, mx, oy, colorDependencia, pt(0.5)));
-        out.push(linea(mx, oy, mx, sy, colorDependencia, pt(0.5)));
-        out.push(linea(mx, sy, sx, sy, colorDependencia, pt(0.5)));
-        out.push(linea(sx, sy, sx - flecha, sy - flecha * 0.9, colorDependencia, pt(0.5)));
-        out.push(linea(sx, sy, sx - flecha, sy + flecha * 0.9, colorDependencia, pt(0.5)));
+        const c = resaltada ? colorTarea : colorDependencia;
+        const w = resaltada ? pt(1) : pt(0.5);
+        out.push(linea(ox, oy, mx, oy, c, w));
+        out.push(linea(mx, oy, mx, sy, c, w));
+        out.push(linea(mx, sy, sx, sy, c, w));
+        if (resaltada) {
+          out.push(linea(sx, sy, sx - flecha, sy - flecha * 0.9, c, w));
+          out.push(linea(sx, sy, sx - flecha, sy + flecha * 0.9, c, w));
+        } else {
+          out.push(linea(sx, sy, sx - flecha, sy - flecha * 0.9, c, pt(0.5)));
+          out.push(linea(sx, sy, sx - flecha, sy + flecha * 0.9, c, pt(0.5)));
+        }
       }
     }
   }
@@ -700,6 +708,8 @@ export function dibujarGantt(filas: Fila[], p: Params): VistaGantt {
     bandas,
     barras,
     hoy: geometriaHoy,
+    tablaX: anchoTabla,
+    dias: { inicio: diaMin, fin: diaMax },
     calendario: { x0: anchoTabla, y0: yDesp, y1: yDesp + altoEncabezado },
     columnas: mostrarColumnas.length > 0 ? { x0: anchoNombreFinal, x1: anchoTabla, y0: yDesp, y1: yDesp + altoEncabezado } : undefined,
   };

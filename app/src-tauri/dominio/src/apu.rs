@@ -3,10 +3,16 @@
 // `cantidad x precio / rendimiento` (rendimiento 1 cuando no se declara) y el
 // precio unitario de la actividad es la suma de cuotas. Si la actividad
 // declara `costo-unitario` explícito, ese manda (ver preparar::resolver_hoja).
+//
+// Catálogo: la raíz del documento puede declarar `recursos:` (dict
+// llave -> {tipo, nombre, medida, precio}); cuando la entrada de una tarea no
+// trae `precio` inline, se resuelve del catálogo por la llave (o el nombre),
+// así un cambio de precio en el catálogo se propaga a todas las actividades
+// que lo usan. El precio inline de la tarea tiene prioridad (compatibilidad).
 
 use serde::Serialize;
 
-use crate::modelo::{aplanar, campo, construir_indice, es_vacio, a_numero, a_numero_formula, ItemCrudo};
+use crate::modelo::{aplanar, campo, construir_indice, es_vacio, a_numero_formula, ItemCrudo};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,8 +38,30 @@ pub struct ApuAnalisis {
     pub recursos: Vec<RecursoApu>,
 }
 
+// Catálogo `recursos:` de la raíz del documento (None si no existe o no es un
+// dict de dicts). Se lee una sola vez y se comparte entre actividades.
+pub fn catalogo_de(raiz: &serde_yaml::Value) -> Option<serde_yaml::Mapping> {
+    use serde_yaml::Value;
+    let m = raiz.as_mapping()?;
+    let v = m.get(&Value::String("recursos".to_string()))?;
+    let catalogo = v.as_mapping()?;
+    let mut salida = serde_yaml::Mapping::new();
+    for (k, val) in catalogo {
+        let llave = k.as_str()?.to_string();
+        salida.insert(Value::String(llave), val.clone());
+    }
+    Some(salida)
+}
+
 // Acepta una lista de mapas o un diccionario clave -> mapa (o valor númerico).
 pub fn analizar_recursos(valor: &serde_yaml::Value) -> Vec<RecursoApu> {
+    analizar_recursos_con(valor, None)
+}
+
+pub fn analizar_recursos_con(
+    valor: &serde_yaml::Value,
+    catalogo: Option<&serde_yaml::Mapping>,
+) -> Vec<RecursoApu> {
     use serde_yaml::Value;
     let extraer = |m: &serde_yaml::Mapping, clave: &str| -> Option<f64> {
         a_numero_formula(campo(m, clave).unwrap_or(&Value::Null))
@@ -42,20 +70,38 @@ pub fn analizar_recursos(valor: &serde_yaml::Value) -> Vec<RecursoApu> {
         let rend = if rendimiento > 0.0 { rendimiento } else { 1.0 };
         cantidad * precio / rend
     };
+    // Precio: inline primero; si no, del catálogo por llave/nombre.
+    let precio_de = |nombre: &str, m: &serde_yaml::Mapping| -> Option<f64> {
+        extraer(m, "precio").or_else(|| {
+            catalogo?.get(&Value::String(nombre.to_string()))?.as_mapping()
+                .and_then(|cm| extraer(cm, "precio"))
+        })
+    };
+    let texto_de = |m: &serde_yaml::Mapping, clave: &str| -> Option<String> {
+        match campo(m, clave) {
+            Some(Value::String(s)) if !s.trim().is_empty() => Some(s.clone()),
+            _ => None,
+        }
+    };
+    // Rellena nombre/medida/tipo con los del catálogo cuando la entrada no los trae.
+    let completar = |nombre: &str, m: &serde_yaml::Mapping| -> (Option<String>, Option<String>, Option<String>) {
+        let catalogo_m = catalogo
+            .and_then(|c| c.get(&Value::String(nombre.to_string())))
+            .and_then(|v| v.as_mapping());
+        let c = |clave: &str| -> Option<String> {
+            texto_de(m, clave).or_else(|| catalogo_m.and_then(|cm| texto_de(cm, clave)))
+        };
+        (c("tipo"), c("nombre"), c("medida"))
+    };
     let to_recurso = |nombre: &str, m: &serde_yaml::Mapping| -> Option<RecursoApu> {
         let cantidad = extraer(m, "cantidad")?;
-        let precio = extraer(m, "precio")?;
+        let precio = precio_de(nombre, m)?;
         let rendimiento = extraer(m, "rendimiento").unwrap_or(1.0);
+        let (tipo, nombre_completo, medida) = completar(nombre, m);
         Some(RecursoApu {
-            tipo: match campo(m, "tipo") {
-                Some(Value::String(s)) if !s.trim().is_empty() => Some(s.clone()),
-                _ => None,
-            },
-            nombre: nombre.to_string(),
-            medida: match campo(m, "medida") {
-                Some(Value::String(s)) if !s.trim().is_empty() => Some(s.clone()),
-                _ => None,
-            },
+            tipo,
+            nombre: nombre_completo.unwrap_or_else(|| nombre.to_string()),
+            medida,
             cantidad,
             precio,
             rendimiento: if rendimiento > 0.0 { rendimiento } else { 1.0 },
@@ -89,9 +135,16 @@ pub fn analizar_recursos(valor: &serde_yaml::Value) -> Vec<RecursoApu> {
 
 // Precio unitario de una actividad desde sus `recursos` (None si no hay
 // recursos válidos). Es el mismo cálculo que `precio-unitario-de-recursos`
-// de datos.typ (Typst).
+// de datos.typ (Typst), catálogo opcional.
 pub fn precio_unitario(valor: &serde_yaml::Value) -> Option<f64> {
-    let recursos = analizar_recursos(valor);
+    precio_unitario_con(valor, None)
+}
+
+pub fn precio_unitario_con(
+    valor: &serde_yaml::Value,
+    catalogo: Option<&serde_yaml::Mapping>,
+) -> Option<f64> {
+    let recursos = analizar_recursos_con(valor, catalogo);
     if recursos.is_empty() {
         None
     } else {
@@ -104,6 +157,7 @@ pub fn precio_unitario(valor: &serde_yaml::Value) -> Option<f64> {
 // resultante. None si la tarea no existe, es un grupo o no declara recursos.
 pub fn analizar(texto: &str, codigo: &str) -> Option<ApuAnalisis> {
     let raiz: serde_yaml::Value = serde_yaml::from_str(texto).ok()?;
+    let catalogo = catalogo_de(&raiz);
     let lista = match &raiz {
         serde_yaml::Value::Sequence(_) => &raiz,
         serde_yaml::Value::Mapping(m) => m.get(&serde_yaml::Value::String("tareas".to_string()))?,
@@ -117,7 +171,7 @@ pub fn analizar(texto: &str, codigo: &str) -> Option<ApuAnalisis> {
         return None; // grupos: no APU propio
     }
     let recursos_val = campo(&item.map, "recursos")?;
-    let recursos = analizar_recursos(recursos_val);
+    let recursos = analizar_recursos_con(recursos_val, catalogo.as_ref());
     if recursos.is_empty() {
         return None;
     }
@@ -252,6 +306,93 @@ tareas:
         let raiz: serde_yaml::Value = serde_yaml::from_str(YAML).unwrap();
         let tareas = raiz["tareas"].as_sequence().unwrap();
         assert_eq!(precio_unitario(&tareas[0]["subtareas"][2]["recursos"]), None);
+    }
+
+    #[test]
+    fn catalogo_resuelve_precio_por_llave() {
+        // El diccionario de la tarea NO trae `precio`; sale del catálogo
+        // raíz `recursos:` por la llave. Cambiar el precio del catálogo
+        // cambia el PU (propagación).
+        let yaml = r#"
+recursos:
+  armador:
+    tipo: mano-obra
+    nombre: Armador jornal
+    medida: jor
+    precio: 48000
+  fierro:
+    tipo: material
+    nombre: Fierro recocido
+    medida: kg
+    precio: 1500
+tareas:
+  - codigo: "1"
+    nombre: Partida
+    subtareas:
+      - codigo: "1.1"
+        nombre: Enfierradura
+        cantidad: "3*40"
+        recursos:
+          armador:
+            cantidad: "0.05*2"
+            rendimiento: 2
+          fierro:
+            cantidad: 95
+"#;
+        let a = analizar(yaml, "1.1").expect("1.1");
+        // armador: 0.1*48000/2 = 2400 ; fierro: 95*1500/1 = 142500
+        assert!((a.costo_unitario - 144900.0).abs() < 1e-9, "cu = {}", a.costo_unitario);
+        assert_eq!(a.costo, Some(120.0 * 144900.0));
+        // nombre/medida se completan desde el catálogo
+        assert_eq!(a.recursos[0].nombre, "Armador jornal");
+        assert_eq!(a.recursos[0].medida.as_deref(), Some("jor"));
+        assert_eq!(a.recursos[1].nombre, "Fierro recocido");
+
+        // Precio inline de la tarea manda sobre el catálogo.
+        let yaml_inline = yaml.replace("          fierro:\n            cantidad: 95\n", "          fierro:\n            cantidad: 95\n            precio: 2000\n");
+        let b = analizar(&yaml_inline, "1.1").expect("1.1");
+        // fierro: 95*2000 = 190000
+        assert!((b.costo_unitario - 192400.0).abs() < 1e-9, "cu = {}", b.costo_unitario);
+
+        // Sin catálogo (todo sin precio inline): el APU no resuelve.
+        let yaml_sin_catalogo = yaml.replace(
+            "recursos:\n  armador:\n    tipo: mano-obra\n    nombre: Armador jornal\n    medida: jor\n    precio: 48000\n  fierro:\n    tipo: material\n    nombre: Fierro recocido\n    medida: kg\n    precio: 1500\n",
+            "",
+        );
+        assert!(analizar(&yaml_sin_catalogo, "1.1").is_none());
+    }
+
+    #[test]
+    fn catalogo_en_precio_unitario_de_preparar() {
+        // El `costo-unitario` implícito (desde `recursos` sin precio inline)
+        // se resuelve del catálogo en la resolución de filas.
+        let yaml = r#"
+recursos:
+  cuadrilla:
+    tipo: mano-obra
+    nombre: Cuadrilla A
+    precio: 9900
+tareas:
+  - codigo: "1"
+    nombre: Partida
+    subtareas:
+      - codigo: "1.1"
+        nombre: Excavación
+        inicio: 2026-03-20
+        duracion: 1
+        cantidad: 2
+        recursos:
+          cuadrilla:
+            cantidad: 1
+"#;
+        let filas = crate::preparar::preparar_proyecto(yaml, &crate::modelo::OpcionesCpm {
+            cpm: false,
+            inicio_proyecto: None,
+            termino_proyecto: None,
+        }).expect("filas");
+        let hoja = filas.iter().find(|f| f.codigo == "1.1").expect("1.1");
+        assert!((hoja.costo_unitario.unwrap() - 9900.0).abs() < 1e-9, "cu = {:?}", hoja.costo_unitario);
+        assert_eq!(hoja.costo, Some(2.0 * 9900.0));
     }
 
     #[test]

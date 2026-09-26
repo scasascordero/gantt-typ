@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use super::apu;
+use super::apu::{catalogo_de, precio_unitario_con};
+use serde_yaml::Mapping;
 use super::cpm::calcular_cpm;
 use super::fechas::a_dias;
 use super::modelo::*;
@@ -8,6 +9,7 @@ struct Ctx {
     indice: Indice,
     orden: Vec<(String, i32)>,
     es_hoja: HashMap<String, bool>,
+    catalogo: Option<Mapping>,
 }
 
 fn es_hoja_de(indice: &Indice, codigo: &str) -> bool {
@@ -74,8 +76,10 @@ fn resolver_hoja(
     let cantidad = a_numero_formula_o(campo(&item.map, "cantidad"));
     // costo-unitario explícito manda; si no, sale del APU (recursos x
     // rendimiento), mismo cálculo que precio-unitario-de-recursos (datos.typ).
-    let cu = a_numero_o(campo(&item.map, "costo-unitario"))
-        .or_else(|| apu::precio_unitario(campo(&item.map, "recursos").unwrap_or(&serde_yaml::Value::Null)));
+    let cu = a_numero_o(campo(&item.map, "costo-unitario")).or_else(|| {
+        let v = campo(&item.map, "recursos").unwrap_or(&serde_yaml::Value::Null);
+        precio_unitario_con(v, ctx.catalogo.as_ref())
+    });
     let costo_expl = a_numero_o(campo(&item.map, "costo"));
     let costo = costo_expl
         .or_else(|| match (cantidad, cu) {
@@ -311,6 +315,7 @@ pub fn preparar_proyecto(texto: &str, opts: &OpcionesCpm) -> Result<Vec<Fila>, S
         indice: indice.clone(),
         orden,
         es_hoja,
+        catalogo: catalogo_de(&raiz),
     };
 
     // Colectar hojas para CPM

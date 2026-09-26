@@ -175,13 +175,13 @@ async fn elegir_destino(
     Ok(elegido.map(|r| r.to_string_lossy().to_string()))
 }
 
-#[tauri::command]
-async fn exportar_pdf(
-    plantilla: String,
-    yaml: String,
-    fuentes: HashMap<String, String>,
-    destino: Option<String>,
-) -> Result<String, String> {
+// Carpeta temporal con el contrato que consume gantt.typ (main.typ +
+// datos.yaml + módulos .typ de la librería).
+fn preparar_carpeta_typst(
+    plantilla: &str,
+    yaml: &str,
+    fuentes: &HashMap<String, String>,
+) -> Result<PathBuf, String> {
     let milis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -191,17 +191,19 @@ async fn exportar_pdf(
 
     std::fs::write(carpeta.join("datos.yaml"), yaml).map_err(|e| e.to_string())?;
     std::fs::write(carpeta.join("main.typ"), plantilla).map_err(|e| e.to_string())?;
-    for (nombre, contenido) in &fuentes {
+    for (nombre, contenido) in fuentes {
         if nombre.ends_with(".typ") {
             std::fs::write(carpeta.join(nombre), contenido).map_err(|e| e.to_string())?;
         }
     }
+    Ok(carpeta)
+}
 
-    let salida = carpeta.join("carta-gantt.pdf");
+fn correr_typst(carpeta: &Path, salida: &Path) -> Result<(), String> {
     let resultado = std::process::Command::new("typst")
-        .current_dir(&carpeta)
+        .current_dir(carpeta)
         .args(["compile", "main.typ"])
-        .arg(&salida)
+        .arg(salida)
         .output()
         .map_err(|e| format!("no se pudo ejecutar `typst`: {e}"))?;
 
@@ -210,6 +212,19 @@ async fn exportar_pdf(
         let stdout = String::from_utf8_lossy(&resultado.stdout);
         return Err(format!("typst falló:\n{stdout}{stderr}"));
     }
+    Ok(())
+}
+
+#[tauri::command]
+async fn exportar_pdf(
+    plantilla: String,
+    yaml: String,
+    fuentes: HashMap<String, String>,
+    destino: Option<String>,
+) -> Result<String, String> {
+    let carpeta = preparar_carpeta_typst(&plantilla, &yaml, &fuentes)?;
+    let salida = carpeta.join("carta-gantt.pdf");
+    correr_typst(&carpeta, &salida)?;
 
     let ruta = match destino {
         Some(d) => {
@@ -229,6 +244,43 @@ async fn exportar_pdf(
         .map_err(|e| format!("no se pudo abrir el PDF: {e}"))?;
 
     Ok(ruta)
+}
+
+// Vista de impresión: compila el mismo contrato de exportar_pdf pero a SVG y
+// devuelve las páginas para mostrarlas en la app. Corre el mismo binario
+// `typst` que produce el PDF => la vista previa es fiel a lo que se imprimirá.
+#[tauri::command]
+async fn vista_impresion(
+    plantilla: String,
+    yaml: String,
+    fuentes: HashMap<String, String>,
+) -> Result<Vec<String>, String> {
+    let carpeta = preparar_carpeta_typst(&plantilla, &yaml, &fuentes)?;
+    // `{p}` en el nombre: typst numera las páginas (carta-gantt-1.svg, …);
+    // sin el template falla si el documento tiene más de una página.
+    correr_typst(&carpeta, &carpeta.join("carta-gantt-{p}.svg"))?;
+
+    let mut paginas: Vec<(u64, String)> = Vec::new();
+    for entrada in std::fs::read_dir(&carpeta).map_err(|e| e.to_string())? {
+        let entrada = entrada.map_err(|e| e.to_string())?;
+        let p = entrada.path();
+        if p.extension().and_then(|e| e.to_str()) != Some("svg") {
+            continue;
+        }
+        let numero = p
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .and_then(|s| s.strip_prefix("carta-gantt-"))
+            .and_then(|s| s.parse::<u64>().ok());
+        if let Some(n) = numero {
+            paginas.push((n, std::fs::read_to_string(&p).map_err(|e| e.to_string())?));
+        }
+    }
+    paginas.sort_by_key(|(n, _)| *n);
+    if paginas.is_empty() {
+        return Err("typst no generó ninguna página SVG".to_string());
+    }
+    Ok(paginas.into_iter().map(|(_, contenido)| contenido).collect())
 }
 
 // --- CRUD SQLite (persistencia por proyecto) --------------------------------
@@ -676,6 +728,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             exportar_pdf,
+            vista_impresion,
             elegir_destino,
             abrir_archivo,
             guardar_archivo,

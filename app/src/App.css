@@ -165,19 +165,7 @@ body,
   color: #475569;
 }
 
-.divisor {
-  cursor: col-resize;
-  background: #e2e8f0;
-  border-left: 1px solid #cbd5e1;
-  border-right: 1px solid #cbd5e1;
-  transition: background 0.12s ease;
-}
-
-.divisor:hover,
-.divisor-activo {
-  background: #2563eb;
-}
-
+/* Popup de mapeo de columnas del Excel. */
 .popup-excel {
   position: fixed;
   top: 20%;
@@ -398,130 +386,17 @@ body,
 
 .contenido {
   display: grid;
-  grid-template-columns: minmax(320px, 40%) 1fr;
+  grid-template-columns: 1fr;
   /* fila con altura definida: sin esto los scrolleables internos no
      desbordan y el scroll desaparece */
   grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-height: 0;
-  /* clip (no hidden): este contenedor no debe poder scrollearse ni por
-     script — CodeMirror subía hasta aquí y movía el preview al saltar a
-     la línea. */
   overflow: clip;
-}
-
-.panel-editor {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-.editor {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  background: #ffffff;
-  border-right: 1px solid #e2e8f0;
 }
 
 .oculto {
   display: none !important;
-}
-
-.tabla-panel {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  background: #ffffff;
-  border-right: 1px solid #e2e8f0;
-}
-
-.tabla-vacia {
-  padding: 24px 16px;
-  color: #64748b;
-  font-size: 12px;
-}
-
-.tabla-tareas {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-  font-size: 12px;
-}
-
-.tabla-tareas th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: #f8fafc;
-  border-bottom: 1px solid #cbd5e1;
-  color: #475569;
-  font-weight: 600;
-  text-align: left;
-  padding: 4px 8px;
-  white-space: nowrap;
-}
-
-.tabla-tareas td {
-  border-bottom: 1px solid #eef2f7;
-  padding: 2px 8px;
-  box-sizing: border-box;
-  height: var(--fila-px, 20px);
-  vertical-align: middle;
-  white-space: nowrap;
-  color: #334155;
-}
-
-.tabla-tareas tr:hover td {
-  background: #f8fafc;
-}
-
-.tabla-tareas tr.sel td {
-  background: #eff6ff;
-}
-
-.tabla-tareas .cel-codigo-h,
-.tabla-tareas .cel-codigo {
-  color: #94a3b8;
-  font-size: 11px;
-  max-width: 90px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tabla-tareas .cel-mostrar {
-  display: inline-block;
-  min-width: 34px;
-  padding: 2px 4px;
-  margin: -2px -4px;
-  border-radius: 4px;
-  cursor: text;
-}
-
-.tabla-tareas .cel-mostrar:hover {
-  background: #e2e8f0;
-}
-
-.cel-edit {
-  width: 100%;
-  font: inherit;
-  border: 1px solid #2563eb;
-  border-radius: 4px;
-  padding: 1px 4px;
-  background: #ffffff;
-  outline: none;
-  color: #0f172a;
-}
-
-.editor .cm-editor {
-  height: 100%;
-}
-
-.editor .cm-scroller {
-  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-  font-size: 13px;
-  overscroll-behavior: contain;
 }
 
 .panel-preview {
@@ -531,12 +406,6 @@ body,
   overflow: clip;
   padding: 16px;
   background: #e2e8f0;
-}
-
-.editor-oculto .panel-editor,
-.editor-oculto .divisor {
-  visibility: hidden;
-  overflow: hidden;
 }
 
 .svg-contenedor {
@@ -550,12 +419,109 @@ body,
   cursor: pointer;
   overflow: auto;
   overscroll-behavior: contain;
+  touch-action: none;
+}
+
+.svg-contenedor .svg-hoja {
+  position: relative;
 }
 
 .svg-contenedor .svg-hoja svg {
   display: block;
   width: 100%;
   height: auto;
+}
+
+/* Resaltado de la fila seleccionada (overlay sobre el SVG escalado). */
+.seleccion-carta {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  background: rgb(37 99 235 / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(37 99 235 / 0.55);
+  border-radius: 3px;
+}
+
+/* Renombrado inline con doble clic (dentro de svg-hoja, sobre el nombre). */
+.renombrar-carta {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  padding: 0 2px;
+  border: 1px solid #2563eb;
+  border-radius: 3px;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+  color: #0f172a;
+  outline: none;
+}
+
+/* Columna anclada de propiedades (a la derecha de la carta). */
+.panel-derecha-sep {
+  background: #cbd5e1;
+}
+
+.panel-propiedades-dock {
+  background: #ffffff;
+  overflow-y: auto;
+  min-width: 0;
+  min-height: 0;
+  font-size: 13px;
+}
+
+.panel-propiedades-dock .panel-propiedades {
+  position: static;
+  width: auto;
+  max-height: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.panel-propiedades-dock .prop-cab {
+  position: sticky;
+}
+
+.prop-codigo {
+  color: #2563eb;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+.prop-boton {
+  padding: 4px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 12px;
+  cursor: pointer;
+  color: #334155;
+  max-width: 180px;
+}
+
+.prop-boton:hover {
+  background: #f8fafc;
+}
+
+.prop-boton-sec {
+  margin-left: 6px;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.prop-recursos {
+  margin: 0;
+  padding: 6px 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  color: #475569;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 160px;
+  overflow: auto;
 }
 
 .aviso {
@@ -721,6 +687,82 @@ body,
   justify-content: flex-start;
   max-width: 100%;
   gap: 4px;
+}
+
+.vista-impresion {
+  width: min(980px, calc(100vw - 32px));
+  max-height: 88vh;
+}
+
+.vista-impresion-controles {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px 0;
+  font-size: 13px;
+  color: #334155;
+}
+
+.vista-impresion-controles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vista-impresion-controles input[type="text"] {
+  width: 56px;
+  padding: 3px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  font-size: 13px;
+}
+
+.vista-impresion-margen-ayuda {
+  color: #64748b;
+  font-size: 12px;
+  margin-left: 2px;
+}
+
+.vista-impresion-cuerpo {
+  display: block;
+  padding: 12px 16px;
+}
+
+.vista-impresion-pagina {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.vista-impresion-pagina-titulo {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.vista-impresion-svg svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #ffffff;
+}
+
+.vista-impresion-vacio {
+  color: #64748b;
+  padding: 24px;
+  text-align: center;
+}
+
+.vista-impresion-error {
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 12px;
+  white-space: pre-wrap;
 }
 
 .menu-contexto {
@@ -945,11 +987,44 @@ body,
   gap: 8px;
   padding: 5px 8px;
   border-radius: 6px;
-  cursor: pointer;
+  cursor: default;
 }
 
 .editor-pred-fila:hover {
   background: #f1f5f9;
+}
+
+.editor-pred-fila.activa {
+  background: #eff6ff;
+}
+
+.editor-pred-caja {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 0;
+  flex: 1;
+}
+
+.editor-pred-opciones {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.editor-pred-opciones select,
+.editor-pred-lag {
+  padding: 2px 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 11.5px;
+  background: #ffffff;
+}
+
+.editor-pred-lag {
+  width: 56px;
 }
 
 .editor-pred-fila input[type="checkbox"] {
@@ -1427,4 +1502,99 @@ body,
 
 .apu-acciones button:hover {
   background: #1d4ed1;
+}
+
+/* Modal de catálogo de recursos (`recursos:` en la raíz) */
+.recursos {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(80vh, 640px);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgb(15 23 42 / 0.25);
+  z-index: 40;
+}
+
+.recursos-cuerpo {
+  padding: 14px 16px;
+  overflow: auto;
+}
+
+.recursos-tabla td .recursos-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.recursos-input {
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.recursos-input:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+.recursos-precio {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.recursos-quitar {
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.recursos-quitar:hover {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.recursos-espacio {
+  flex: 1;
+}
+
+.recursos-guardar,
+.recursos-agregar {
+  padding: 6px 14px;
+  border: 1px solid #2563eb;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.recursos-guardar:hover,
+.recursos-agregar:hover {
+  background: #1d4ed1;
+}
+
+.recursos-guardar:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.apu-acciones .recursos-agregar {
+  background: #ffffff;
+  color: #2563eb;
+}
+
+.apu-acciones .recursos-agregar:hover {
+  background: #eff6ff;
 }

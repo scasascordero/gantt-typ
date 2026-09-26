@@ -355,11 +355,20 @@
 // (análisis de precios unitarios). Cada recurso contribuye con la cuota
 // `cantidad x precio / rendimiento` (rendimiento 1 por defecto). El campo
 // `recursos` admite una lista de mapas o un diccionario clave -> mapa/valor.
+// Con `recursos-de` (catálogo raíz `recursos:`, dict llave -> {tipo?,
+// nombre?, medida?, precio}) una entrada sin `precio` inline resuelve el
+// precio de la llave/nombre del catálogo; el precio inline manda.
 // Si la actividad declara `costo-unitario` explícito, ese manda.
-#let precio-unitario-de-recursos(item) = {
+#let precio-unitario-de-recursos(item, recursos-de: none) = {
   let recursos = item.at("recursos", default: none)
   if recursos == none {
     return none
+  }
+  let precio-catalogo(nombre) = {
+    if recursos-de == none { return none }
+    let cat = recursos-de.at(nombre, default: none)
+    if type(cat) != dictionary { return none }
+    a-formula(cat.at("precio", default: none))
   }
   let lista = if type(recursos) == dictionary {
     recursos.pairs().map(pair => {
@@ -374,10 +383,11 @@
   let cuotas = lista.map(r => {
     let cantidad = a-formula(r.at("cantidad", default: none))
     let precio = a-numero(r.at("precio", default: none))
+    let precio-final = if precio != none { precio } else { precio-catalogo(r.at("nombre", default: "")) }
     let rendimiento = a-formula(r.at("rendimiento", default: none))
-    if cantidad == none or precio == none { 0.0 } else {
+    if cantidad == none or precio-final == none { 0.0 } else {
       let divisor = if rendimiento == none or rendimiento <= 0.0 { 1.0 } else { rendimiento }
-      cantidad * precio / divisor
+      cantidad * precio-final / divisor
     }
   })
   if cuotas.len() == 0 { none } else { cuotas.sum() }
@@ -392,7 +402,7 @@
 // `fechas-de` (mapa codigo -> fechas ya resueltas por el motor CPM para las
 // tareas hoja), las hojas toman sus fechas de ahí en vez de resolver fija con
 // `resolver-fechas-hoja` (que exige `inicio` explícito).
-#let resolver-nodo(indice, codigo, fechas-de: none) = {
+#let resolver-nodo(indice, codigo, fechas-de: none, recursos-de: none) = {
   let item = indice.mapa.at(codigo)
   let hijos = indice.hijos-de.at(codigo, default: ())
 
@@ -403,7 +413,7 @@
     // manda sobre el producto. `unidad` es solo texto descriptivo.
     let cantidad = a-formula(item.at("cantidad", default: none))
     let cu-expl = a-numero(item.at("costo-unitario", default: none))
-    let cu = if cu-expl != none { cu-expl } else { precio-unitario-de-recursos(item) }
+    let cu = if cu-expl != none { cu-expl } else { precio-unitario-de-recursos(item, recursos-de: recursos-de) }
     let costo-expl = a-numero(item.at("costo", default: none))
     let costo = if costo-expl != none { costo-expl }
       else if cantidad != none and cu != none { cantidad * cu }
@@ -415,7 +425,7 @@
       costo-unitario: cu, costo: costo,
     )
   } else {
-    let sub = hijos.map(h => resolver-nodo(indice, h, fechas-de: fechas-de))
+    let sub = hijos.map(h => resolver-nodo(indice, h, fechas-de: fechas-de, recursos-de: recursos-de))
 
     let inicio-raw = item.at("inicio", default: none)
     let termino-raw = item.at("termino", default: none)
@@ -530,6 +540,7 @@
   inicio-proyecto: none,
   termino-proyecto: none,
   fechas-cpm: none,
+  recursos-de: none,
 ) = {
   let plano = aplanar(datos-crudos)
   let indice = construir-indice(plano)
@@ -623,7 +634,7 @@
 
   orden.map(o => {
     let item = indice.mapa.at(o.codigo)
-    let r = resolver-nodo(indice, o.codigo, fechas-de: fechas-de)
+    let r = resolver-nodo(indice, o.codigo, fechas-de: fechas-de, recursos-de: recursos-de)
     let es-grupo = indice.hijos-de.at(o.codigo, default: ()).len() > 0
     let hito = item.at("hito", default: false) == true or (r.duracion <= 1 and es-vacio(item.at("termino", default: none)) and es-vacio(item.at("duracion", default: none)) and not es-grupo)
     let base = (

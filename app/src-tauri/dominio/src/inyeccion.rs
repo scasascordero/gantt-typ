@@ -31,7 +31,10 @@ pub fn filas_a_yaml(filas: &[Fila]) -> String {
 // para que la salida sea estable e idéntica a la de `preparar-tareas`.
 fn fila_a_mapa(f: &Fila) -> Value {
     let mut m = Mapping::new();
-    push_str(&mut m, "codigo", Value::String(f.codigo.clone()));
+    // El proyecto no lleva número WBS: se omite 'codigo' cuando está vacío.
+    if !f.codigo.is_empty() {
+        push_str(&mut m, "codigo", Value::String(f.codigo.clone()));
+    }
     push_str(&mut m, "id", Value::String(f.id.clone()));
     push_str(&mut m, "nombre", Value::String(f.nombre.clone()));
     push_str(&mut m, "nivel", Value::Number(f.nivel.into()));

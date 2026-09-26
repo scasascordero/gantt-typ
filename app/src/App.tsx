@@ -1,8 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { basicSetup } from "codemirror";
-import { Compartment, EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
-import { yaml } from "@codemirror/lang-yaml";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import ejemploDatos from "../../ejemplos/ejemplo_1.yaml?raw";
@@ -20,14 +16,15 @@ import { editarCampo, editarCampoConsistente, leerCampo, leerConfigYaml, ponerCo
 import { editarPredecesoras } from "./lib/yamlOperaciones";
 import EditorPredecesoras from "./EditorPredecesoras";
 import AnalisisApu from "./AnalisisApu";
+import Recursos from "./Recursos";
 import MenuCalendario from "./MenuCalendario";
 import MenuColumnas from "./MenuColumnas";
 import { proyectoAYaml, yamlAProyecto, type ProyectoCompleto } from "./lib/proyectoDb";
 import MenuParametros from "./MenuParametros";
 import MenuProyectos, { type ProyectoInfo } from "./MenuProyectos";
 import MenuTarea from "./MenuTarea";
-import PanelTabla from "./PanelTabla";
 import PropiedadesTarea from "./PropiedadesTarea";
+import VistaImpresion, { type VistaImpresionEstado } from "./VistaImpresion";
 import "./App.css";
 
 // Piezas de la barra de menú: una franja con menús desplegables (Archivo,
@@ -132,14 +129,6 @@ function docVacio(id: string): Doc {
   return { id, nombre: "sin-titulo.yaml", texto: "", sucio: false };
 }
 
-interface PopupFecha {
-  x: number;
-  y: number;
-  desde: number;
-  hasta: number;
-  valor: string;
-}
-
 interface ExcelInfo {
   hojaSugerida: string;
   hojas: string[];
@@ -154,28 +143,19 @@ function App() {
   const [exportando, setExportando] = useState(false);
   const [mensaje, setMensaje] = useState("");
   const [zoom, setZoom] = useState(1);
-  const [anchoEditorPct, setAnchoEditorPct] = useState(40);
-  const [editorOculto, setEditorOculto] = useState(false);
-  const [editorEditable, setEditorEditable] = useState(false); // si mostrar el YAML en modo editable
-  const [vistaIzquierda, setVistaIzquierda] = useState<"yaml" | "tabla">("yaml");
-  const [tablaSeleccion, setTablaSeleccion] = useState<string | null>(null);
-  const tablaPanelRef = useRef<HTMLDivElement | null>(null);
-  const editorEditableRef = useRef(editorEditable);
-  editorEditableRef.current = editorEditable;
-  const readonlyComp = useRef(new Compartment());
-  const [arrastrandoDivisor, setArrastrandoDivisor] = useState(false);
-  const contenidoRef = useRef<HTMLElement | null>(null);
   const [parametros, setParametros] = useState<Record<string, Valor>>(() => valoresDefault());
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [menuProyectosAbierto, setMenuProyectosAbierto] = useState(false);
+  const [vistaImp, setVistaImp] = useState<VistaImpresionEstado>(null);
+  const [vistaImpGenerando, setVistaImpGenerando] = useState(false);
   const [menuCalendario, setMenuCalendario] = useState<{ x: number; y: number } | null>(null);
   const [menuColumnas, setMenuColumnas] = useState<{ x: number; y: number } | null>(null);
   const [menuTarea, setMenuTarea] = useState<{ x: number; y: number; codigo: string; nombre: string } | null>(null);
   const [editorPredecesoras, setEditorPredecesoras] = useState<{ codigo: string; nombre: string } | null>(null);
   const [apuAbierto, setApuAbierto] = useState<{ codigo: string } | null>(null);
+  const [recursosAbierto, setRecursosAbierto] = useState(false);
   const [copiado, setCopiado] = useState("");
   const [proyectos, setProyectos] = useState<ProyectoInfo[]>([]);
-  const [popupFecha, setPopupFecha] = useState<PopupFecha | null>(null);
   const [menuRaizAbierto, setMenuRaizAbierto] = useState<string | null>(null);
   const menuBarraRef = useRef<HTMLDivElement | null>(null);
   const cerrarMenus = useCallback(() => setMenuRaizAbierto(null), []);
@@ -193,8 +173,9 @@ function App() {
     hoja: string;
   } | null>(null);
   const [mapaSel, setMapaSel] = useState<ColumnasExcel | null>(null);
-  const [propsTarea, setPropsTarea] = useState<{ x: number; y: number; codigo: string } | null>(null);
-  const inputFecha = useRef<HTMLInputElement | null>(null);
+  const [seleccion, setSeleccion] = useState<{ codigo: string } | null>(null);
+  const [rectSel, setRectSel] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [renombrando, setRenombrando] = useState<{ codigo: string; valor: string; rect: { left: number; top: number; width: number; height: number } } | null>(null);
 
   const nivelActual = String(parametros["mostrar-niveles"] ?? "auto");
 
@@ -248,10 +229,10 @@ function App() {
   // emite como SVG. Typst ya no compila en pantalla: sigue siendo el motor de
   // la exportación PDF (mismo contrato de `config:`, misma apariencia).
   const vista = useMemo<VistaGantt | null>(() => {
-    const filas = filasPanel;
-    if (!filas || filas.length === 0) return null;
-    return dibujarGantt(filas, parametros);
-  }, [filasPanel, parametros]);
+const filas = filasPanel;
+    if (!filas) return null;
+    return dibujarGantt(filas, parametros, seleccion?.codigo ?? undefined);
+  }, [filasPanel, parametros, seleccion]);
   const svg = vista?.svg ?? null;
   const geometria = vista?.geometria ?? null;
   const milis = vista?.milis ?? 0;
@@ -261,22 +242,11 @@ function App() {
     fijarTituloVentana(`${docActual.nombre}${docActual.sucio ? " •" : ""} — Gantt Editor`);
   }, [docActual.nombre, docActual.sucio]);
 
-  const editorRef = useRef<EditorView | null>(null);
-  const contenedorEditor = useRef<HTMLDivElement | null>(null);
   const svgCaja = useRef<HTMLDivElement | null>(null);
   const textoRef = useRef(texto);
   textoRef.current = texto;
   const idActivoRef = useRef(idActivo);
   idActivoRef.current = idActivo;
-
-  const alCambiarTexto = useCallback((t: string) => {
-    const id = idActivoRef.current;
-    setDocs((prev) =>
-      prev.map((d) =>
-        d.id === id ? { ...d, texto: t, sucio: d.texto !== t } : d,
-      ),
-    );
-  }, []);
 
   const cargarProyectos = useCallback(async () => {
     try {
@@ -292,27 +262,6 @@ function App() {
   }, [cargarProyectos]);
 
   useEffect(() => {
-    if (!contenedorEditor.current) return;
-    const vista = new EditorView({
-      parent: contenedorEditor.current,
-      state: EditorState.create({
-        doc: textoRef.current,
-        extensions: [
-          basicSetup,
-          yaml(),
-          readonlyComp.current.of(EditorState.readOnly.of(true)),
-          EditorView.updateListener.of((u) => {
-            if (u.docChanged) alCambiarTexto(u.state.doc.toString());
-          }),
-        ],
-      }),
-    });
-    editorRef.current = vista;
-    return () => vista.destroy();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
     const caja = svgCaja.current;
     if (!caja) return;
     const alRueda = (e: WheelEvent) => {
@@ -324,6 +273,50 @@ function App() {
     return () => caja.removeEventListener("wheel", alRueda);
   }, [svg]);
 
+  // Resaltado de la fila seleccionada: el overlay va dentro de svg-hoja, cuyas
+  // dimensiones en píxeles coinciden con el SVG ya escalado por el zoom, así
+  // que basta con mapear las coordenadas del viewBox a ese espacio.
+  useLayoutEffect(() => {
+    const calcular = () => {
+      const s = seleccion;
+      const g = geometria;
+      const caja = svgCaja.current;
+      if (!s || !g || !g.bandas.length || !caja) {
+        setRectSel(null);
+        return;
+      }
+      const b = g.bandas.find((x) => x.codigo === s.codigo);
+      if (!b) {
+        setRectSel(null);
+        return;
+      }
+      const svgEl = caja.querySelector("svg");
+      if (!svgEl) {
+        setRectSel(null);
+        return;
+      }
+      const r = svgEl.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) {
+        setRectSel(null);
+        return;
+      }
+      const fEscX = r.width / g.ancho;
+      const fEscY = r.height / g.alto;
+      setRectSel({
+        top: b.y0 * fEscY,
+        left: 0,
+        width: g.ancho * fEscX,
+        height: (b.y1 - b.y0) * fEscY,
+      });
+    };
+    const t = window.setTimeout(calcular, 0);
+    window.addEventListener("resize", calcular);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("resize", calcular);
+    };
+  }, [seleccion, geometria, zoom, svg]);
+
   const tareas = useMemo(() => {
     const todas = listarTareas(texto);
     if (nivelActual === "auto") return todas;
@@ -331,26 +324,26 @@ function App() {
     return todas.filter((t) => t.nivel < k);
   }, [texto, nivelActual]);
   const tareasTodas = useMemo(() => listarTareas(texto), [texto]);
-  const tareasTodasRef = useRef(tareasTodas);
-  tareasTodasRef.current = tareasTodas;
 
-  const saltarATarea = useCallback(
-    (indice: number) => {
-      const v = editorRef.current;
-      const tarea = tareas[indice];
-      if (!v || !tarea) return;
-      const linea = v.state.doc.line(Math.min(tarea.linea, v.state.doc.lines));
-      v.dispatch({
-        selection: { anchor: linea.from, head: linea.to },
-        effects: EditorView.scrollIntoView(linea.from, { y: "center" }),
-      });
-      v.focus();
-    },
-    [tareas],
-  );
+  // "Colapsar" avanza un nivel por clic: 1, 2, … hasta cubrir el nivel más
+  // profundo y vuelve a "todos". `mostrar-niveles: k` muestra nivel < k.
+  const maxNivel = useMemo(() => tareasTodas.reduce((m, t) => Math.max(m, t.nivel), 0), [tareasTodas]);
+  const siguienteColapso = useMemo(() => {
+    if (nivelActual === "auto") return "1";
+    const k = Math.max(1, Math.floor(Number(nivelActual)) || 1);
+    return k + 1 > maxNivel + 1 ? "auto" : String(k + 1);
+  }, [nivelActual, maxNivel]);
+
+  // Etiquetas del nivel de colapso en términos del WBS: el proyecto no lleva
+  // número; "Nivel 1" es el primer nivel de actividades (sus hijos).
+  const etiquetaColapso = (k: string): string => {
+    if (k === "auto") return "todos";
+    const n = Math.max(1, Math.floor(Number(k)) || 1);
+    return n <= 1 ? "Proyecto" : `Nivel ${n - 1}`;
+  };
 
   const indiceDePunto = useCallback(
-    (e: React.MouseEvent) => {
+    (e: React.MouseEvent | PointerEvent) => {
       const caja = svgCaja.current;
       const g = geometria;
       if (!caja || !g || !g.bandas.length) return -1;
@@ -380,58 +373,27 @@ function App() {
     [geometria],
   );
 
+  // Selección: un clic sobre una fila de la carta abre sus propiedades y la
+  // deja resaltada; el panel anclado a la derecha concentra toda la edición
+  // que antes vivía en la tabla y el YAML.
   const alClicSvg = useCallback(
     (e: React.MouseEvent) => {
       const i = indiceDePunto(e);
       if (i < 0) return;
-      if (vistaIzquierda === "tabla") {
-        const t = tareas[i];
-        if (t) setTablaSeleccion(t.id);
-      } else {
-        saltarATarea(i);
-      }
+      if (!geometria?.bandas[i]?.codigo) return;
+      setMenuTarea(null);
+      setSeleccion({ codigo: geometria.bandas[i].codigo });
     },
-    [indiceDePunto, saltarATarea, vistaIzquierda, tareas],
+    [indiceDePunto, geometria],
   );
 
   const ponerEnEditor = useCallback((textoNuevo: string) => {
-    const v = editorRef.current;
-    if (!v) return;
-    v.dispatch({
-      changes: { from: 0, to: v.state.doc.length, insert: textoNuevo },
-    });
-  }, []);
-
-  // Alterna la edición de texto libre (por defecto el YAML es solo lectura
-  // y toda mutación pasa por la UI, que siempre genera YAML válido).
-  const alternarEditorEditable = useCallback(() => {
-    const nuevo = !editorEditableRef.current;
-    setEditorEditable(nuevo);
-    const v = editorRef.current;
-    if (v) {
-      v.dispatch({
-        effects: readonlyComp.current.reconfigure(EditorState.readOnly.of(!nuevo)),
-      });
-    }
-    setMensaje(
-      nuevo
-        ? "Edición de texto habilitada: cuidá que el YAML siga siendo válido."
-        : "Texto bloqueado: edición solo por la carta.",
+    const id = idActivoRef.current;
+    setDocs((prev) =>
+      prev.map((d) =>
+        d.id === id ? { ...d, texto: textoNuevo, sucio: d.texto !== textoNuevo } : d,
+      ),
     );
-  }, []);
-
-  const irALinea = useCallback((linea: number) => {
-    const v = editorRef.current;
-    if (!v) return;
-    setEditorOculto(false);
-    const doc = v.state.doc;
-    const n = Math.min(Math.max(1, linea), doc.lines);
-    const line = doc.line(n);
-    v.dispatch({
-      selection: { anchor: line.from },
-      effects: EditorView.scrollIntoView(line.from, { y: "center" }),
-    });
-    v.focus();
   }, []);
 
   const alClicDerechoCarta = useCallback(
@@ -466,7 +428,9 @@ function App() {
       const i = indiceDePunto(e);
       if (i >= 0 && tareas[i]) {
         e.preventDefault();
-        setPropsTarea({ x: e.clientX, y: e.clientY, codigo: tareas[i].id });
+        // clic derecho en una fila: selecciona y abre las acciones de tarea
+        setSeleccion({ codigo: tareas[i].id });
+        setMenuTarea({ x: e.clientX, y: e.clientY, codigo: tareas[i].id, nombre: tareas[i].nombre });
       }
     },
     [indiceDePunto, tareas, geometria],
@@ -476,12 +440,213 @@ function App() {
     (e: React.MouseEvent) => {
       const i = indiceDePunto(e);
       if (i < 0) return;
+      const g = geometria;
+      const caja = svgCaja.current;
       const t = tareas[i];
+      if (!g || !caja || !t || g.tablaX === undefined) return;
+      const s = caja.querySelector("svg");
+      if (!s) return;
+      e.preventDefault();
+      const rect = s.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      // Localizar el <text> del nombre (columna de la izquierda del calendario).
+      const fEscX = g.ancho / rect.width;
+      const fEscY = g.alto / rect.height;
+      const b = g.bandas[i];
+      const centroY = rect.top + ((b.y0 + b.y1) / 2) * fEscY;
+      const bordeTabla = rect.left + g.tablaX * fEscX;
+      let mejor: { left: number; top: number; width: number; height: number } | null = null;
+      let menor = 8;
+      for (const tv of caja.querySelectorAll("svg text")) {
+        const r = tv.getBoundingClientRect();
+        if (r.width <= 0 || r.right > bordeTabla + 1) continue;
+        const dcentro = Math.abs(r.top + r.height / 2 - centroY);
+        if (dcentro <= menor && r.left >= rect.left - 1) {
+          menor = dcentro;
+          mejor = {
+            left: r.left - rect.left - 2,
+            top: r.top - rect.top - 2,
+            width: r.width + 4,
+            height: r.height + 4,
+          };
+        }
+      }
+      if (!mejor) return;
+      setSeleccion({ codigo: t.id });
+      setRenombrando({ codigo: t.id, valor: t.nombre, rect: mejor });
+    },
+    [indiceDePunto, tareas, geometria],
+  );
+
+  const commitRenombre = useCallback(
+    (valor: string) => {
+      setRenombrando((r) => {
+        if (!r) return r;
+        const v = valor.trim();
+        if (v && v !== r.valor) {
+          try {
+            ponerEnEditor(editarCampo(textoRef.current, r.codigo, "nombre", v));
+          } catch (err) {
+            setMensaje(`Error al renombrar: ${String(err)}`);
+          }
+        }
+        return null;
+      });
+    },
+    [ponerEnEditor],
+  );
+
+  // --- Arrastre/estirado de barras -------------------------------------------
+  // Mover una barra desplaza `inicio` (la duración se conserva; el término lo
+  // arrastra editarCampoConsistente). Estirar por los bordes cambia el
+  // término (o inicio con ancla en el término) recalculando la duración.
+  interface ArrastreBarra {
+    codigo: string;
+    modo: "mover" | "izq" | "der";
+    diaIni: number;
+    diaFin: number;
+    ultimoInicio: number;
+    ultimoFin: number;
+  }
+  const arrastreRef = useRef<ArrastreBarra | null>(null);
+
+  const escalaSvg = useCallback((): { rect: DOMRect; fx: number; fy: number } | null => {
+    const caja = svgCaja.current;
+    const g = geometria;
+    if (!caja || !g || !g.ancho) return null;
+    const s = caja.querySelector("svg");
+    if (!s) return null;
+    const rect = s.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    return { rect, fx: g.ancho / rect.width, fy: g.alto / rect.height };
+  }, [geometria]);
+
+  const diaEnPx = useCallback(
+    (px: number): number => {
+      const g = geometria;
+      if (!g?.tablaX || !g?.dias || g.ancho <= g.tablaX) return g?.dias?.inicio ?? 0;
+      const paso = (g.dias.fin - g.dias.inicio + 1) / (g.ancho - g.tablaX);
+      return g.dias.inicio + (px - g.tablaX) * paso;
+    },
+    [geometria],
+  );
+
+  const iniciarArrastre = useCallback(
+    (e: React.PointerEvent) => {
+      const g = geometria;
+      const esc = escalaSvg();
+      if (!g || !esc || !g.tablaX || !g.dias) return;
+      const px = (e.clientX - esc.rect.left) * esc.fx;
+      const py = (e.clientY - esc.rect.top) * esc.fy;
+      const tol = 6 * esc.fx;
+      const barra = g.barras.find(
+        (b) => px >= b.x - tol && px <= b.x + b.w + tol && py >= b.y - tol && py <= b.y + b.h + tol,
+      );
+      if (!barra?.codigo) return;
+      const t = filasPanel?.find((x) => x.codigo === barra.codigo);
       if (!t) return;
       e.preventDefault();
-      setMenuTarea({ x: e.clientX, y: e.clientY, codigo: t.id, nombre: t.nombre });
+      setSeleccion({ codigo: barra.codigo });
+      const diaIni = Math.round(diaEnPx(barra.x));
+      const diaFin = Math.round(diaEnPx(barra.x + barra.w)) - 1;
+      const enIzq = px <= barra.x + tol;
+      const enDer = px >= barra.x + barra.w - tol;
+      arrastreRef.current = {
+        codigo: barra.codigo,
+        modo: t.esGrupo || t.hito || (!enIzq && !enDer) ? "mover" : enIzq ? "izq" : "der",
+        diaIni,
+        diaFin,
+        ultimoInicio: diaIni,
+        ultimoFin: diaFin,
+      };
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
-    [indiceDePunto, tareas],
+    [geometria, escalaSvg, diaEnPx, setSeleccion, filasPanel],
+  );
+
+  const moverArrastre = useCallback(
+    (e: React.PointerEvent) => {
+      const d = arrastreRef.current;
+      const g = geometria;
+      const esc = escalaSvg();
+      const caja = svgCaja.current;
+      if (!g || !esc || !caja || !g.tablaX || !g.dias) return;
+      const px = (e.clientX - esc.rect.left) * esc.fx;
+      const py = (e.clientY - esc.rect.top) * esc.fy;
+
+      if (!d) {
+        // feedback de cursor sobre la barra (sin arrastre aún)
+        const tol = 6 * esc.fx;
+        const barra = g.barras.find(
+          (b) => px >= b.x - tol && px <= b.x + b.w + tol && py >= b.y - tol && py <= b.y + b.h + tol,
+        );
+        caja.style.cursor = !barra
+          ? ""
+          : px <= barra.x + tol || px >= barra.x + barra.w - tol
+            ? "ew-resize"
+            : "move";
+        return;
+      }
+
+      const diaApuntado = Math.round(diaEnPx(px));
+      const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
+      let textoNuevo: string | null = null;
+
+      if (d.modo === "mover") {
+        const nuevo = clamp(d.diaIni + (diaApuntado - d.diaIni), g.dias.inicio, g.dias.fin);
+        if (nuevo !== d.ultimoInicio) {
+          try {
+            textoNuevo = editarCampoConsistente(textoRef.current, d.codigo, "inicio", fechaIso(nuevo));
+          } catch (err) {
+            setMensaje(`Error al mover: ${String(err)}`);
+          }
+          if (textoNuevo) {
+            d.ultimoInicio = nuevo;
+            ponerEnEditor(textoNuevo);
+          }
+        }
+      } else if (d.modo === "izq") {
+        const nuevoIni = clamp(diaApuntado, g.dias.inicio, d.diaFin);
+        if (nuevoIni !== d.ultimoInicio) {
+          try {
+            let t1 = editarCampoConsistente(textoRef.current, d.codigo, "termino", fechaIso(d.diaFin));
+            t1 = editarCampo(t1, d.codigo, "inicio", fechaIso(nuevoIni));
+            textoNuevo = editarCampoConsistente(t1, d.codigo, "termino", fechaIso(d.diaFin));
+          } catch (err) {
+            setMensaje(`Error al estirar: ${String(err)}`);
+          }
+          if (textoNuevo) {
+            d.ultimoInicio = nuevoIni;
+            ponerEnEditor(textoNuevo);
+          }
+        }
+      } else {
+        const nuevoFin = clamp(diaApuntado - 1, d.diaIni, g.dias.fin);
+        if (nuevoFin !== d.ultimoFin) {
+          try {
+            textoNuevo = editarCampoConsistente(textoRef.current, d.codigo, "termino", fechaIso(nuevoFin));
+          } catch (err) {
+            setMensaje(`Error al estirar: ${String(err)}`);
+          }
+          if (textoNuevo) {
+            d.ultimoFin = nuevoFin;
+            ponerEnEditor(textoNuevo);
+          }
+        }
+      }
+    },
+    [geometria, escalaSvg, diaEnPx, ponerEnEditor],
+  );
+
+  const terminarArrastre = useCallback(
+    (e: React.PointerEvent) => {
+      if (!arrastreRef.current) return;
+      arrastreRef.current = null;
+      const caja = svgCaja.current;
+      if (caja && caja.hasPointerCapture(e.pointerId)) caja.releasePointerCapture(e.pointerId);
+      if (caja) caja.style.cursor = "";
+    },
+    [],
   );
 
   const cerrarMenu = useCallback(() => setMenuAbierto(false), []);
@@ -562,39 +727,46 @@ function App() {
   }, [filasPanel]);
 
   const CAMPOS_TAREA = [
-    "nombre", "inicio", "termino", "duracion", "avance", "formato-barra",
+    "nombre", "hito", "inicio", "termino", "duracion", "avance", "id", "vinculo",
+    "recursos", "formato-barra",
     "negrita", "italica", "color-texto", "ocultar-subtareas",
     "cantidad", "unidad", "costo-unitario", "costo",
   ];
   const camposTarea = useMemo(() => {
-    if (!propsTarea) return null;
+    if (!seleccion) return null;
     const c: Record<string, ValorCampo> = {};
     for (const k of CAMPOS_TAREA) {
       try {
-        c[k] = leerCampo(texto, propsTarea.codigo, k);
+        c[k] = leerCampo(texto, seleccion.codigo, k);
       } catch {
         c[k] = null;
       }
     }
     // "término" no declarado: se muestra el calculado (inicio+duración o CPM)
     if (!c.termino) {
-      const calculado = terminoCalculado.get(propsTarea.codigo);
+      const calculado = terminoCalculado.get(seleccion.codigo);
       if (calculado) c.termino = calculado;
     }
     return c;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [propsTarea, texto, terminoCalculado]);
+  }, [seleccion, texto, terminoCalculado]);
 
   const aplicarCampoTarea = useCallback(
     (clave: string, valor: ValorCampo) => {
-      if (!propsTarea) return;
+      if (!seleccion) return;
       try {
-        ponerEnEditor(editarCampoConsistente(textoRef.current, propsTarea.codigo, clave, valor));
+        // fechas y duración se mantienen coherentes (inicio+duración-1=término);
+        // el resto de los campos se escribe tal cual.
+        const especiales = new Set(["inicio", "termino", "duracion", "avance"]);
+        const editado = especiales.has(clave)
+          ? editarCampoConsistente(textoRef.current, seleccion.codigo, clave, valor)
+          : editarCampo(textoRef.current, seleccion.codigo, clave, valor);
+        ponerEnEditor(editado);
       } catch (err) {
         setMensaje(`Error al editar: ${String(err)}`);
       }
     },
-    [propsTarea, ponerEnEditor],
+    [seleccion, ponerEnEditor],
   );
 
   // Aviso de fechas/duración incoherentes editadas a mano en el YAML: con un
@@ -615,8 +787,8 @@ function App() {
   );
 
   const abrirPredecesoras = useCallback((codigoTarea: string, nombreTarea: string) => {
+    setSeleccion({ codigo: codigoTarea });
     setMenuTarea(null);
-    setPropsTarea(null);
     setEditorPredecesoras({ codigo: codigoTarea, nombre: nombreTarea });
   }, []);
 
@@ -634,17 +806,8 @@ function App() {
     [editorPredecesoras, ponerEnEditor],
   );
 
-  useEffect(() => setPropsTarea(null), [idActivo]);
-  useEffect(() => {
-    if (!propsTarea) return;
-    const afuera = (ev: PointerEvent) => {
-      const el = ev.target as Element | null;
-      if (el?.closest?.(".panel-propiedades")) return;
-      setPropsTarea(null);
-    };
-    window.addEventListener("pointerdown", afuera);
-    return () => window.removeEventListener("pointerdown", afuera);
-  }, [propsTarea]);
+  useEffect(() => setSeleccion(null), [idActivo]);
+  useEffect(() => setEditorPredecesoras(null), [idActivo]);
 
   const seleccionarDoc = useCallback(
     (id: string) => {
@@ -965,182 +1128,6 @@ function App() {
     [cambiarParametro],
   );
 
-  useEffect(() => {
-    if (!arrastrandoDivisor) return;
-    const mover = (e: PointerEvent) => {
-      const caja = contenidoRef.current;
-      if (!caja) return;
-      const r = caja.getBoundingClientRect();
-      const pct = ((e.clientX - r.left) / r.width) * 100;
-      setAnchoEditorPct(Math.min(78, Math.max(22, pct)));
-    };
-    const soltar = () => setArrastrandoDivisor(false);
-    window.addEventListener("pointermove", mover);
-    window.addEventListener("pointerup", soltar);
-    document.body.style.userSelect = "none";
-    return () => {
-      window.removeEventListener("pointermove", mover);
-      window.removeEventListener("pointerup", soltar);
-      document.body.style.userSelect = "";
-    };
-  }, [arrastrandoDivisor]);
-
-  // Sincronización continua de la tabla y la carta: con el mismo paso vertical
-  // (alto-fila × escala del SVG) y un delta de desplazamiento constante, la
-  // fila i y la banda i quedan a la misma altura en pantalla siempre.
-  useEffect(() => {
-    const contC = svgCaja.current;
-    const contT = tablaPanelRef.current;
-    if (vistaIzquierda !== "tabla" || !contC || !contT || !svg || !geometria) return;
-    if (!geometria.bandas.length) return;
-    const svgEl = contC.querySelector("svg");
-    if (!svgEl) return;
-
-    let limpiar: Array<() => void> = [];
-    let ultimo = "";
-    const aplicar = () => {
-      const sr = svgEl.getBoundingClientRect();
-      if (sr.height <= 0) return;
-      const escala = sr.height / geometria.alto;
-      const b = geometria.bandas;
-      const pasoBanda = (b[1]?.y0 - b[0].y0) * escala;
-      const paso =
-        Number.isFinite(pasoBanda) && pasoBanda > 0
-          ? pasoBanda
-          : Number(parametros["alto-fila"] ?? 0.6) * 28.346 * escala;
-      const fila0 = contT.querySelector("tbody tr.fila-tarea") as HTMLElement | null;
-    if (!fila0) return;
-    // espacio previo de la carta antes de la primera banda (calendario), para
-    // replicarlo como espaciador antes de la primera fila de la tabla.
-    const cr = contC.getBoundingClientRect();
-    const espIni = sr.top + b[0].y0 * escala - (cr.top - contC.scrollTop);
-    contT.style.setProperty("--espacio-ini", `${Math.max(0, espIni).toFixed(2)}px`);
-    // const K = posición en pantalla (layout) de banda 0 menos la de fila 0,
-    // independiente del scroll actual: offC y offR se calculan quitando la
-    // dependencia de scrollTop, de modo que K es estable entre re-ejecuciones.
-    const offC = sr.top + b[0].y0 * escala + contC.scrollTop;
-    const offR = fila0.getBoundingClientRect().top + contT.scrollTop;
-    const k = offC - offR;
-    const firma = `${Math.max(4, paso).toFixed(2)}|${k.toFixed(2)}`;
-    if (firma === ultimo) return;
-    ultimo = firma;
-
-    limpiar.forEach((f) => f());
-    limpiar = [];
-    const pasoPx = Math.max(4, paso).toFixed(2);
-    contT.style.setProperty("--fila-px", `${pasoPx}px`);
-    contT.style.setProperty("--espacio-ini", `${Math.max(0, espIni).toFixed(2)}px`);
-
-    const tope = (el: HTMLElement, v: number) =>
-      Math.min(Math.max(0, v), Math.max(0, el.scrollHeight - el.clientHeight));
-    let sincro = false;
-    const terminar = () => requestAnimationFrame(() => (sincro = false));
-    const onTabla = () => {
-      if (sincro) return;
-      sincro = true;
-      contC.scrollTop = tope(contC, contT.scrollTop + k);
-      terminar();
-    };
-    const onCarta = () => {
-      if (sincro) return;
-      sincro = true;
-      contT.scrollTop = tope(contT, contC.scrollTop - k);
-      terminar();
-    };
-    contT.addEventListener("scroll", onTabla);
-    contC.addEventListener("scroll", onCarta);
-    limpiar.push(() => {
-      contT.removeEventListener("scroll", onTabla);
-      contC.removeEventListener("scroll", onCarta);
-    });
-
-    // alinear también el estado inicial (sin esperar el primer scroll: al
-    // montar la tabla ambos contenedores están en 0 y las filas se desvían de
-    // las bandas en k px).
-    sincro = true;
-    contC.scrollTop = tope(contC, contT.scrollTop + k);
-    contT.scrollTop = tope(contT, contC.scrollTop - k);
-    terminar();
-    };
-
-    aplicar();
-    const ro = new ResizeObserver(() => aplicar());
-    ro.observe(contC);
-    ro.observe(contT);
-    return () => {
-      ro.disconnect();
-      limpiar.forEach((f) => f());
-    };
-  }, [svg, zoom, anchoEditorPct, vistaIzquierda, geometria, parametros]);
-
-  // clic derecho sobre una fecha AAAA-MM-DD del YAML: calendario para elegirla
-  const alClicDerechoEditor = useCallback((e: React.MouseEvent) => {
-    const v = editorRef.current;
-    if (!v) return;
-    const pos = v.posAtCoords({ x: e.clientX, y: e.clientY }, false);
-    if (pos === null) return;
-    const linea = v.state.doc.lineAt(pos);
-    const off = pos - linea.from;
-    const re = /\d{4}-\d{2}-\d{2}/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(linea.text)) !== null) {
-      if (off >= m.index && off <= m.index + m[0].length) {
-        e.preventDefault();
-        setPopupFecha({
-          x: e.clientX,
-          y: e.clientY,
-          desde: linea.from + m.index,
-          hasta: linea.from + m.index + 10,
-          valor: m[0],
-        });
-        return;
-      }
-    }
-    const tarea = tareasTodasRef.current.find((t) => t.linea === linea.number);
-    if (tarea) {
-      e.preventDefault();
-      setMenuTarea({ x: e.clientX, y: e.clientY, codigo: tarea.id, nombre: tarea.nombre });
-    }
-  }, []);
-
-  const aplicarFecha = (nueva: string) => {
-    if (!nueva || !popupFecha) return;
-    const v = editorRef.current;
-    if (v) {
-      v.dispatch({ changes: { from: popupFecha.desde, to: popupFecha.hasta, insert: nueva } });
-      v.focus();
-    }
-    setPopupFecha(null);
-  };
-
-  useEffect(() => {
-    if (!popupFecha) return;
-    const input = inputFecha.current;
-    if (input) {
-      input.focus();
-      try {
-        (input as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
-      } catch {
-        // sin activación de usuario suficiente: el usuario abre el calendario a mano
-      }
-    }
-    const cerrar = (ev: Event) => {
-      if (ev instanceof KeyboardEvent) {
-        if (ev.key === "Escape") setPopupFecha(null);
-        return;
-      }
-      const el = ev.target as Element | null;
-      if (el?.closest?.(".popup-fecha")) return;
-      setPopupFecha(null);
-    };
-    window.addEventListener("mousedown", cerrar);
-    window.addEventListener("keydown", cerrar);
-    return () => {
-      window.removeEventListener("mousedown", cerrar);
-      window.removeEventListener("keydown", cerrar);
-    };
-  }, [popupFecha]);
-
   // cierra la barra de menú al hacer click o Escape afuera de ella
   useEffect(() => {
     if (!menuRaizAbierto) return;
@@ -1200,29 +1187,44 @@ function App() {
     return typeof v === "string" && v.trim() !== "" ? v : undefined;
   };
 
-  const exportarPdf = async () => {
+  // YAML con fechas y costos resueltos por el motor Rust (inyeccion => YAML que
+  // gantt.typ consume sin recalcular): mismo contrato de preparar-tareas. Lo
+  // comparten la vista de impresión y la exportación a PDF.
+  const yamlParaExportar = async (): Promise<string> => {
+    try {
+      return await invoke<string>("filas_a_yaml", {
+        texto: textoRef.current,
+        cpm: parametros["cpm"] === true,
+        inicioProyecto: fechaOpt("inicio-proyecto"),
+        terminoProyecto: fechaOpt("termino-proyecto"),
+      });
+    } catch (err) {
+      setMensaje(`Inyección Rust no disponible, usando YAML crudo: ${String(err)}`);
+      return textoRef.current;
+    }
+  };
+
+  const exportarPdf = () => ejecutarExportarPdf();
+
+  // Plantilla con márgenes opcionales para impresión: si llega override, se
+  // aplican los del modal de vista de impresión sobre los parámetros actuales.
+  const plantillaConMargenes = (override?: { margenes: boolean; margen: number }): string =>
+    generarMainTyp(
+      override
+        ? { ...parametros, margenes: override.margenes, margen: override.margen }
+        : parametros,
+    );
+
+  const ejecutarExportarPdf = async (override?: { margenes: boolean; margen: number }) => {
     setExportando(true);
     setMensaje("");
     try {
       const destino = await elegirDestino("pdf");
       if (!destino) return;
-      // Fechas y costos resueltos por el motor Rust (inyeccion => YAML que
-      // gantt.typ consume sin recalcular): mismo contrato de preparar-tareas.
-      let yaml = textoRef.current;
-      try {
-        yaml = await invoke<string>("filas_a_yaml", {
-          texto: textoRef.current,
-          cpm: parametros["cpm"] === true,
-          inicioProyecto: fechaOpt("inicio-proyecto"),
-          terminoProyecto: fechaOpt("termino-proyecto"),
-        });
-      } catch (err) {
-        setMensaje(`Inyección Rust no disponible, usando YAML crudo: ${String(err)}`);
-        yaml = textoRef.current;
-      }
+      const yaml = await yamlParaExportar();
       const ruta = await invoke<string>("exportar_pdf", {
         yaml,
-        plantilla: generarMainTyp(parametros),
+        plantilla: plantillaConMargenes(override),
         fuentes: fuentesLibreria(),
         destino,
       });
@@ -1231,6 +1233,26 @@ function App() {
       setMensaje(`Error: ${String(err)}`);
     } finally {
       setExportando(false);
+    }
+  };
+
+  // Vista de impresión: compila la misma plantilla/datos que el PDF (por el
+  // binario `typst` de Rust) pero a SVG, para afinar antes de exportar.
+  const abrirVistaImpresion = async (override?: { margenes: boolean; margen: number }) => {
+    setVistaImpGenerando(true);
+    setVistaImp(null);
+    try {
+      const yaml = await yamlParaExportar();
+      const hojas = await invoke<string[]>("vista_impresion", {
+        yaml,
+        plantilla: plantillaConMargenes(override),
+        fuentes: fuentesLibreria(),
+      });
+      setVistaImp({ tipo: "ok", hojas });
+    } catch (err) {
+      setVistaImp({ tipo: "error", msg: String(err) });
+    } finally {
+      setVistaImpGenerando(false);
     }
   };
 
@@ -1315,6 +1337,8 @@ function App() {
         ? "ok"
         : "compilando";
 
+  const columnas = `1fr${seleccion ? " 1px 320px" : " 0px 0px"}`;
+
   return (
     <div className="app">
       <div className="menu-barra" ref={menuBarraRef}>
@@ -1342,6 +1366,10 @@ function App() {
           <MenuItem onClick={() => { cerrarMenus(); void importarExcel(); }}>Excel…</MenuItem>
         </MenuRaiz>
         <MenuRaiz nombre="Exportar" abierto={menuRaizAbierto === "exportar"} onToggle={() => alternarRaiz("exportar")}>
+          <MenuItem deshabilitado={estados !== "ok"} info="preview del PDF" onClick={() => { cerrarMenus(); void abrirVistaImpresion(); }}>
+            Vista de impresión…
+          </MenuItem>
+          <MenuSep />
           <MenuItem deshabilitado={estados !== "ok" || exportando} onClick={() => { cerrarMenus(); exportarPdf(); }}>
             {exportando ? "Exportando…" : "PDF"}
           </MenuItem>
@@ -1362,30 +1390,12 @@ function App() {
             Excel
           </MenuItem>
         </MenuRaiz>
-        <MenuRaiz nombre="Editar" abierto={menuRaizAbierto === "editar"} onToggle={() => alternarRaiz("editar")}>
-          <MenuItem activa={vistaIzquierda === "yaml"} onClick={() => { cerrarMenus(); setVistaIzquierda("yaml"); }}>
-            Ver YAML
-          </MenuItem>
-          <MenuItem activa={vistaIzquierda === "tabla"} onClick={() => { cerrarMenus(); setVistaIzquierda("tabla"); }}>
-            Ver Tabla
-          </MenuItem>
-          <MenuSep />
-          <MenuItem
-            activa={editorEditable}
-            deshabilitado={vistaIzquierda !== "yaml"}
-            info={editorEditable ? "editable" : "solo lectura"}
-            onClick={() => { cerrarMenus(); alternarEditorEditable(); }}
-          >
-            Edición directa del YAML
-          </MenuItem>
-          <MenuSep />
-          <MenuItem activa={editorOculto} onClick={() => { cerrarMenus(); setEditorOculto((o) => !o); }}>
-            {editorOculto ? "Mostrar panel" : "Ocultar panel"}
-          </MenuItem>
-        </MenuRaiz>
         <MenuRaiz nombre="Configurar" abierto={menuRaizAbierto === "configurar"} onToggle={() => alternarRaiz("configurar")}>
           <MenuItem onClick={() => { cerrarMenus(); setMenuAbierto(true); }}>
             Parámetros de la carta…
+          </MenuItem>
+          <MenuItem onClick={() => { cerrarMenus(); setRecursosAbierto(true); }}>
+            Recursos…
           </MenuItem>
         </MenuRaiz>
         <MenuRaiz nombre="Ver" abierto={menuRaizAbierto === "ver"} onToggle={() => alternarRaiz("ver")}>
@@ -1416,13 +1426,16 @@ function App() {
             <span>%</span>
           </div>
           <MenuSep />
-          <MenuItem info="Nivel 1" onClick={() => { cerrarMenus(); fijarNiveles("1"); }}>
+          <MenuItem
+            info={etiquetaColapso(siguienteColapso)}
+            onClick={() => { cerrarMenus(); fijarNiveles(siguienteColapso); }}
+          >
             Colapsar
           </MenuItem>
           <MenuItem info="Todos" onClick={() => { cerrarMenus(); fijarNiveles("auto"); }}>
             Expandir
           </MenuItem>
-          <MenuInfo>Niveles: {nivelActual === "auto" ? "todos" : nivelActual}</MenuInfo>
+          <MenuInfo>Niveles: {etiquetaColapso(nivelActual)}</MenuInfo>
         </MenuRaiz>
         <MenuRaiz nombre="Ventana" abierto={menuRaizAbierto === "ventana"} onToggle={() => alternarRaiz("ventana")}>
           {docs.map((d) => (
@@ -1446,57 +1459,61 @@ function App() {
         </div>
         {mensaje && <span className="mensaje">{mensaje}</span>}
       </div>
-
       <main
-        className={`contenido${editorOculto ? " editor-oculto" : ""}`}
-        ref={contenidoRef}
-        style={{
-          gridTemplateColumns: editorOculto
-            ? "0px 0px 1fr"
-            : `minmax(280px, ${anchoEditorPct}%) 7px 1fr`,
-        }}
+        className="contenido"
+        style={{ gridTemplateColumns: columnas }}
       >
-        <section className="panel-editor" onContextMenu={alClicDerechoEditor}>
-          <div ref={contenedorEditor} className={`editor${vistaIzquierda === "tabla" ? " oculto" : ""}`} />
-          <PanelTabla
-            texto={texto}
-            oculto={vistaIzquierda !== "tabla"}
-            seleccion={tablaSeleccion}
-            maxNivel={nivelActual}
-            tablaRef={tablaPanelRef}
-            onCambiar={ponerEnEditor}
-            onSeleccionar={setTablaSeleccion}
-          />
-        </section>
-
-        <div
-          className={`divisor${arrastrandoDivisor ? " divisor-activo" : ""}`}
-          title="Arrastrar para redimensionar · doble clic: restablecer"
-          onPointerDown={(e) => {
-            e.preventDefault();
-            setArrastrandoDivisor(true);
-          }}
-          onDoubleClick={() => setAnchoEditorPct(40)}
-        />
-
         <section className="panel-preview">
           {svg && geometria ? (
-            <>
+            <div
+              ref={svgCaja}
+              className="svg-contenedor"
+              onClick={alClicSvg}
+              onDoubleClick={alDobleClicCarta}
+              onContextMenu={alClicDerechoCarta}
+              onPointerDown={iniciarArrastre}
+              onPointerMove={moverArrastre}
+              onPointerUp={terminarArrastre}
+              onPointerCancel={terminarArrastre}
+              title="Clic: propiedades · arrastra barras para mover/estirar · doble clic: acciones · clic derecho: menú · Ctrl+rueda: zoom"
+            >
               <div
-                ref={svgCaja}
-                className="svg-contenedor"
-                onClick={alClicSvg}
-                onDoubleClick={alDobleClicCarta}
-                onContextMenu={alClicDerechoCarta}
-                title="Ctrl + rueda: zoom · clic: ir a la línea · clic derecho: propiedades"
+                dangerouslySetInnerHTML={{ __html: svg }}
+                className="svg-hoja"
+                style={{ width: `${zoom * 100}%` }}
               >
-                <div
-                  dangerouslySetInnerHTML={{ __html: svg }}
-                  className="svg-hoja"
-                  style={{ width: `${zoom * 100}%` }}
-                />
               </div>
-            </>
+              {rectSel && (
+                <div
+                  className="seleccion-carta"
+                  style={{
+                    top: rectSel.top,
+                    left: rectSel.left,
+                    width: rectSel.width,
+                    height: rectSel.height,
+                  }}
+                />
+              )}
+              {renombrando && (
+                <input
+                  className="renombrar-carta"
+                  style={renombrando.rect}
+                  defaultValue={renombrando.valor}
+                  autoFocus
+                  onFocus={(ev) => ev.currentTarget.select()}
+                  onClick={(ev) => ev.stopPropagation()}
+                  onBlur={(ev) => commitRenombre(ev.currentTarget.value)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === "Enter") {
+                      ev.preventDefault();
+                      ev.currentTarget.blur();
+                    } else if (ev.key === "Escape") {
+                      setRenombrando(null);
+                    }
+                  }}
+                />
+              )}
+            </div>
           ) : (
             <div className="aviso">
               {erroresValidacion.length ? (
@@ -1507,6 +1524,28 @@ function App() {
             </div>
           )}
         </section>
+
+        {seleccion && (
+          <>
+            <div className="panel-derecha-sep" />
+            <aside className="panel-propiedades-dock">
+              {camposTarea && (
+                <PropiedadesTarea
+                  codigo={seleccion.codigo}
+                  nombre={String(camposTarea.nombre ?? seleccion.codigo)}
+                  campos={camposTarea}
+                  onAplicar={aplicarCampoTarea}
+                  onCerrar={() => setSeleccion(null)}
+                  onAbrirPredecesoras={() =>
+                    abrirPredecesoras(seleccion.codigo, String(camposTarea.nombre ?? seleccion.codigo))
+                  }
+                  onAbrirApu={() => setApuAbierto({ codigo: seleccion.codigo })}
+                  onAbrirRecursos={() => setRecursosAbierto(true)}
+                />
+              )}
+            </aside>
+          </>
+        )}
       </main>
       {diagnosticos.length > 0 && (
         <div className="diagnosticos">
@@ -1517,9 +1556,9 @@ function App() {
               onClick={
                 d.correccion
                   ? () => corregirInconsistencia(d.correccion!.codigo, d.correccion!.duracionCalculada)
-                  : () => irALinea(d.linea)
+                  : undefined
               }
-              title={d.correccion ? "Corregir la duración para que coincida con el término" : "Mostrar el YAML en esa línea"}
+              title={d.correccion ? "Corregir la duración para que coincida con el término" : undefined}
             >
               <span className="diag-linea">{d.linea}</span>
               <span className="diag-texto">{d.mensaje}</span>
@@ -1600,6 +1639,21 @@ function App() {
           onCerrar={() => setApuAbierto(null)}
         />
       )}
+      {recursosAbierto && (
+        <Recursos
+          texto={texto}
+          onGuardar={(nuevoTexto) => {
+            try {
+              ponerEnEditor(nuevoTexto);
+              setMensaje("Catálogo de recursos actualizado: las actividades que lo referencian recalculan su costo");
+              setRecursosAbierto(false);
+            } catch (err) {
+              setMensaje(`Error al guardar el catálogo: ${String(err)}`);
+            }
+          }}
+          onCerrar={() => setRecursosAbierto(false)}
+        />
+      )}
       {editorPredecesoras && (
         <EditorPredecesoras
           codigo={editorPredecesoras.codigo}
@@ -1608,6 +1662,21 @@ function App() {
           cpm={cpmActivado}
           onGuardar={guardarPredecesoras}
           onCerrar={() => setEditorPredecesoras(null)}
+        />
+      )}
+      {(vistaImp !== null || vistaImpGenerando) && (
+        <VistaImpresion
+          estado={vistaImp}
+          generando={vistaImpGenerando}
+          nombre={docActual.nombre}
+          margenesInicial={parametros["margenes"] === true}
+          margenInicial={String(parametros["margen"] ?? 1)}
+          onRefrescar={(margenes, margen) => void abrirVistaImpresion({ margenes, margen })}
+          onExportarPdf={(margenes, margen) => void ejecutarExportarPdf({ margenes, margen })}
+          onCerrar={() => {
+            setVistaImp(null);
+            setVistaImpGenerando(false);
+          }}
         />
       )}
       {menuProyectosAbierto && (
@@ -1629,20 +1698,6 @@ function App() {
           }}
           onCerrar={() => setMenuProyectosAbierto(false)}
         />
-      )}
-      {popupFecha && (
-        <div className="popup-fecha" style={{ left: popupFecha.x, top: popupFecha.y + 6 }}>
-          <input
-            ref={inputFecha}
-            type="date"
-            defaultValue={popupFecha.valor}
-            onChange={(ev) => aplicarFecha(ev.currentTarget.value)}
-            onKeyDown={(ev) => {
-              if (ev.key === "Enter") aplicarFecha(ev.currentTarget.value);
-            }}
-          />
-          <span className="popup-fecha-ayuda">Enter aplica · Esc cierra</span>
-        </div>
       )}
       {excelRangos && (
         <div className="popup-excel">
@@ -1702,17 +1757,6 @@ function App() {
             </button>
           </div>
         </div>
-      )}
-      {propsTarea && camposTarea && (
-        <PropiedadesTarea
-          x={propsTarea.x}
-          y={propsTarea.y}
-          codigo={propsTarea.codigo}
-          nombre={String(camposTarea.nombre ?? propsTarea.codigo)}
-          campos={camposTarea}
-          onAplicar={aplicarCampoTarea}
-          onCerrar={() => setPropsTarea(null)}
-        />
       )}
     </div>
   );

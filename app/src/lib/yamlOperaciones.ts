@@ -91,7 +91,9 @@ function limpiarIds(n: YAMLMap): void {
 }
 
 // Reordena códigos (1, 1.1, 1.2…) en orden de documento, completa los ids
-// que falten y traduce las predecesoras al id efectivo de su destino.
+// que falten y traduce las predecesoras al id efectivo de su destino. La
+// primera tarea de la raíz es el proyecto completo: no lleva número WBS y
+// sus subtareas pasan a ser el primer nivel.
 function renumerar(doc: Document): void {
   const r = raizTareas(doc);
   if (!r) return;
@@ -123,21 +125,44 @@ function renumerar(doc: Document): void {
   }
 
   let contador = 0;
-  const descender = (seq: YAMLSeq, nivel: number, numeros: number[]): void => {
+  const numerarItem = (item: YAMLMap, nivel: number, numeros: number[]): void => {
+    contador += 1;
+    numeros[nivel] = (numeros[nivel] ?? 0) + 1;
+    item.set("codigo", numeros.slice(0, nivel + 1).join("."));
+    const idActual = item.get("id");
+    if (typeof idActual !== "string" || idActual.length === 0) {
+      item.set("id", `t${contador}`);
+    }
+    const sub = item.get("subtareas", true);
+    if (isSeq(sub)) numerarSeq(sub, nivel + 1, [...numeros.slice(0, nivel + 1), 0]);
+  };
+  const numerarSeq = (seq: YAMLSeq, nivel: number, numeros: number[]): void => {
     for (const item of seq.items) {
       if (!isMap(item)) continue;
+      numerarItem(item, nivel, numeros);
+    }
+  };
+
+  // El proyecto (primera tarea de la raíz) no consume número; sus subtareas
+  // y cualquier otra tarea raíz comparten el contador del primer nivel.
+  const numeros = [0];
+  let primera = false;
+  for (const item of r.items) {
+    if (!isMap(item)) continue;
+    if (!primera) {
+      primera = true;
       contador += 1;
-      numeros[nivel] = (numeros[nivel] ?? 0) + 1;
-      item.set("codigo", numeros.slice(0, nivel + 1).join("."));
+      item.set("codigo", "");
       const idActual = item.get("id");
       if (typeof idActual !== "string" || idActual.length === 0) {
         item.set("id", `t${contador}`);
       }
       const sub = item.get("subtareas", true);
-      if (isSeq(sub)) descender(sub, nivel + 1, [...numeros.slice(0, nivel + 1), 0]);
+      if (isSeq(sub)) numerarSeq(sub, 0, numeros);
+      continue;
     }
-  };
-  descender(r, 0, []);
+    numerarItem(item, 0, numeros);
+  }
 }
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;

@@ -66,6 +66,54 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
     return d;
   }
 
+  // Catálogo de recursos (`recursos:` en la raíz): diccionario de llaves a
+  // {tipo?, nombre?, medida?, precio}. `precio` debe evaluar a un número o
+  // fórmula; actividades sin `precio` inline resuelven el suyo desde acá.
+  // El mapa queda disponible para las tareas vía `catalogoPrecio`.
+  const catalogoPrecio = new Map<string, boolean>();
+  const seccionCatalogo = doc.get("recursos", true);
+  if (seccionCatalogo != null) {
+    const lineaCatalogo = nroLinea(texto, (seccionCatalogo as { range?: [number, number] | null }).range?.[0] ?? null);
+    if (!isMap(seccionCatalogo)) {
+      d.push({
+        linea: lineaCatalogo,
+        mensaje: "'recursos' de la raíz debe ser un diccionario llave -> {tipo?, nombre?, medida?, precio}",
+        severidad: "error",
+      });
+    } else {
+      const catalogoJson = seccionCatalogo.toJSON() as Record<string, unknown>;
+      for (const [llave, valor] of Object.entries(catalogoJson)) {
+        if (valor == null || typeof valor !== "object") {
+          d.push({
+            linea: lineaCatalogo,
+            mensaje: `'recursos.${llave}' debe ser un mapa con 'precio'`,
+            severidad: "aviso",
+          });
+          catalogoPrecio.set(llave, false);
+          continue;
+        }
+        const precio = (valor as Record<string, unknown>).precio;
+        if (precio == null || precio === "") {
+          d.push({
+            linea: lineaCatalogo,
+            mensaje: `'recursos.${llave}' no tiene 'precio'`,
+            severidad: "aviso",
+          });
+          catalogoPrecio.set(llave, false);
+        } else if (numeroOFormula(precio) == null) {
+          d.push({
+            linea: lineaCatalogo,
+            mensaje: `'recursos.${llave}': el 'precio' no evalúa a un número o fórmula válida (ej: "45000", "2*22500")`,
+            severidad: "aviso",
+          });
+          catalogoPrecio.set(llave, false);
+        } else {
+          catalogoPrecio.set(llave, true);
+        }
+      }
+    }
+  }
+
   interface Item {
     codigo: string;
     nombre: string;
@@ -78,20 +126,27 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
   const codigosVistos = new Map<string, number>();
   const idsVistos = new Map<string, string>(); // id -> codigo
 
-  const caminar = (seq: unknown, _nivel: number): void => {
+  const caminar = (seq: unknown, _nivel: number, enRaiz: boolean): void => {
     if (!isSeq(seq)) return;
+    let primeraRaiz = enRaiz;
     for (const nodo of seq.items) {
       if (!isMap(nodo)) continue;
+      const esProyecto = primeraRaiz;
+      primeraRaiz = false;
       // `toJSON()` resuelve los campos a valores JS de forma uniforme
       // (el get() de nodos devuelve colecciones crudas según el estilo).
       const datos = nodo.toJSON() as Record<string, unknown>;
       const linea = nroLinea(texto, nodo.range ? nodo.range[0] : null);
       const codigo = datos.codigo;
       if (typeof codigo !== "string" || !codigo.trim()) {
-        d.push({ linea, mensaje: "Tarea sin 'codigo'", severidad: "error" });
-        continue;
+        // La primera tarea de la raíz es el proyecto completo: no requiere un
+        // número WBS (su código puede estar vacío o ausente).
+        if (!esProyecto) {
+          d.push({ linea, mensaje: "Tarea sin 'codigo'", severidad: "error" });
+          continue;
+        }
       }
-      const clave = codigo.trim();
+      const clave = (typeof codigo === "string" ? codigo : "").trim();
       if (codigosVistos.has(clave)) {
         d.push({
           linea,
@@ -135,31 +190,48 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
         }
       }
 
-      // `recursos` (APU): cada recurso necesita cantidad y precio (numéricos o
-      // fórmulas); `rendimiento`, si está, también debe evaluar a un número.
+      // `recursos` (APU): cada recurso necesita cantidad (numéricos o
+      // fórmulas) y precio — inline o, si la entrada no trae `precio`, del
+      // catálogo raíz `recursos:` por su llave/nombre. `rendimiento`, si
+      // está, también debe evaluar a un número.
       const recursos = datos.recursos;
       if (recursos != null) {
-        const listaR = Array.isArray(recursos) ? recursos : Object.values(recursos as object);
-        const sinCampos = listaR.filter(
-          (r): r is Record<string, unknown> =>
-            r != null && typeof r === "object" && ((r as Record<string, unknown>).cantidad == null || (r as Record<string, unknown>).precio == null),
-        );
-        const conCamposNoEvaluables = listaR.filter((r) => {
-          if (r == null || typeof r !== "object") return false;
-          const obj = r as Record<string, unknown>;
-          return (obj.cantidad != null && numeroOFormula(obj.cantidad) == null) || (obj.rendimiento != null && obj.rendimiento !== "" && numeroOFormula(obj.rendimiento) == null);
+        const llaveDe = (r: Record<string, unknown>): string =>
+          typeof r.nombre === "string" ? r.nombre : clave;
+        const entradas: { llave: string; obj: unknown }[] = Array.isArray(recursos)
+          ? recursos.map((r) => ({ llave: r != null && typeof r === "object" ? llaveDe(r as Record<string, unknown>) : "", obj: r }))
+          : Object.entries(recursos as object).map(([k, v]) => ({ llave: k, obj: v }));
+        const sinCampos = entradas.filter(({ llave: rclave, obj }) => {
+          if (obj == null || typeof obj !== "object") {
+            // valor desnudo = solo cantidad; debe resolver el precio del catálogo.
+            return !catalogoPrecio.has(rclave);
+          }
+          const o = obj as Record<string, unknown>;
+          const resuelvePrecio = o.precio != null || catalogoPrecio.has(rclave);
+          return o.cantidad == null || !resuelvePrecio;
+        });
+        const conCamposNoEvaluables = entradas.filter(({ obj }) => {
+          if (obj == null || typeof obj !== "object") return false;
+          const o = obj as Record<string, unknown>;
+          const precioEvalua =
+            o.precio == null || o.precio === "" || numeroOFormula(o.precio) != null;
+          return (
+            (o.cantidad != null && numeroOFormula(o.cantidad) == null) ||
+            (o.rendimiento != null && o.rendimiento !== "" && numeroOFormula(o.rendimiento) == null) ||
+            !precioEvalua
+          );
         });
         if (sinCampos.length > 0) {
           d.push({
             linea,
-            mensaje: `'${clave}': ${sinCampos.length} recurso(s) del APU sin 'cantidad' ni 'precio'`,
+            mensaje: `'${clave}': ${sinCampos.length} recurso(s) del APU sin 'cantidad' o sin 'precio' (ni en el catálogo 'recursos:')`,
             severidad: "aviso",
           });
         }
         if (conCamposNoEvaluables.length > 0) {
           d.push({
             linea,
-            mensaje: `'${clave}': ${conCamposNoEvaluables.length} recurso(s) con 'cantidad' o 'rendimiento' que no evaluan a un numero o formula valida (ej: "3*40", "(8+4)/2")`,
+            mensaje: `'${clave}': ${conCamposNoEvaluables.length} recurso(s) con 'cantidad', 'rendimiento' o 'precio' que no evaluan a un numero o formula valida (ej: "3*40", "(8+4)/2")`,
             severidad: "aviso",
           });
         }
@@ -178,10 +250,10 @@ export function validarTexto(texto: string, cpm: boolean): Diagnostico[] {
         tieneInicio: typeof inicio === "string" && RE_FECHA.test(inicio.trim()),
         pred: tokensDePredecesoras(datos.predecesoras),
       });
-      caminar(sub, _nivel + 1);
+      caminar(sub, _nivel + 1, false);
     }
   };
-  caminar(raiz, 0);
+  caminar(raiz, 0, true);
 
   // reglas por tarea (mismas restricciones de resolver-fechas-hoja / cpm)
   for (const t of items) {

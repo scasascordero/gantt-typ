@@ -333,3 +333,61 @@ export function ponerConfigYaml(texto: string, valores: Record<string, Valor>): 
   if (doc.errors.length > 0) return texto;
   return doc.toString();
 }
+
+// --- Catálogo de recursos (`recursos:` en la raíz) ------------------------
+
+export interface RecursoCatalogo {
+  llave: string;
+  tipo: string;
+  nombre: string;
+  medida: string;
+  precio: string;
+}
+
+// Lee la sección raíz `recursos:` (llave -> {tipo?, nombre?, medida?,
+// precio?}) en orden estable; devuelve lista vacía si no existe o no es mapa.
+export function leerRecursosYaml(texto: string): RecursoCatalogo[] {
+  const out: RecursoCatalogo[] = [];
+  const doc = parseDocument(texto);
+  const sec = doc.get("recursos", true);
+  if (!isMap(sec)) return out;
+  const textoDe = (v: unknown): string => (typeof v === "string" ? v : v == null ? "" : String(v));
+  for (const pair of sec.items) {
+    const llave = String(pair.key);
+    const v = pair.value;
+    const m = (isMap(v) ? v.toJSON() : null) as Record<string, unknown> | null;
+    out.push({
+      llave,
+      tipo: m ? textoDe(m.tipo) : "",
+      nombre: m ? textoDe(m.nombre) : "",
+      medida: m ? textoDe(m.medida) : "",
+      precio: m ? textoDe(m.precio) : "",
+    });
+  }
+  return out;
+}
+
+// Reescribe la sección raíz `recursos:` desde la lista editada. Se omite la
+// sección si no queda ninguna llave. Conserva el orden de las llaves y el
+// resto del documento intacto.
+export function ponerRecursosYaml(texto: string, recursos: RecursoCatalogo[]): string {
+  const doc = parseDocument(texto);
+  if (doc.errors.length > 0) return texto;
+  const conDatos = recursos.filter((r) => r.llave.trim() !== "");
+  if (conDatos.length === 0) {
+    doc.delete("recursos");
+  } else {
+    const mapa = doc.createNode({}) as YAMLMap;
+    for (const r of conDatos) {
+      const entrada: Record<string, unknown> = {};
+      if (r.tipo.trim() !== "") entrada.tipo = r.tipo.trim();
+      if (r.nombre.trim() !== "") entrada.nombre = r.nombre.trim();
+      if (r.medida.trim() !== "") entrada.medida = r.medida.trim();
+      if (r.precio.trim() !== "") entrada.precio = r.precio.trim();
+      mapa.set(r.llave.trim(), doc.createNode(entrada));
+    }
+    doc.set("recursos", mapa);
+  }
+  if (doc.errors.length > 0) return texto;
+  return doc.toString();
+}
